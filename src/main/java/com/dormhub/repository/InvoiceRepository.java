@@ -1,0 +1,16 @@
+package com.dormhub.repository;
+
+import com.dormhub.entity.Invoice;
+import java.time.YearMonth;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
+
+    boolean existsByRoom_RoomIdAndBillingMonth(Long roomId, YearMonth billingMonth);
+
+    boolean existsByContract_ContractIdAndBillingMonth(Long contractId, YearMonth billingMonth);
+
+    Page<Invoice> findByBillingMonth(YearMonth billingMonth, Pageable pageable);
+}
