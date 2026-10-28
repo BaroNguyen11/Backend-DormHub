@@ -17,10 +17,15 @@ import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "meter_readings", uniqueConstraints = @UniqueConstraint(
         name = "uk_meter_readings_room_month", columnNames = {"room_id", "reading_month"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class MeterReading {
 
     @Id
@@ -61,9 +66,6 @@ public class MeterReading {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    protected MeterReading() {
-    }
-
     public MeterReading(Room room, YearMonth readingMonth,
             BigDecimal electricityOld, BigDecimal electricityNew,
             BigDecimal waterOld, BigDecimal waterNew,
@@ -81,47 +83,4 @@ public class MeterReading {
         this.createdAt = createdAt;
     }
 
-    public Long getReadingId() {
-        return readingId;
-    }
-
-    public Room getRoom() {
-        return room;
-    }
-
-    public YearMonth getReadingMonth() {
-        return readingMonth;
-    }
-
-    public BigDecimal getElectricityOld() {
-        return electricityOld;
-    }
-
-    public BigDecimal getElectricityNew() {
-        return electricityNew;
-    }
-
-    public BigDecimal getWaterOld() {
-        return waterOld;
-    }
-
-    public BigDecimal getWaterNew() {
-        return waterNew;
-    }
-
-    public BigDecimal getElectricityPrice() {
-        return electricityPrice;
-    }
-
-    public BigDecimal getWaterPrice() {
-        return waterPrice;
-    }
-
-    public ReadingStatus getStatus() {
-        return status;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
 }

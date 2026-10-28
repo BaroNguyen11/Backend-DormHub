@@ -1,43 +1,45 @@
 package com.dormhub.service;
 
-import com.dormhub.dto.request.RoomMonthlyChargeInput;
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
+import com.dormhub.entity.MeterReading;
+import com.dormhub.entity.ReadingStatus;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.YearMonth;
 import org.springframework.stereotype.Component;
 
 @Component
 public class RoomMonthlyChargeCalculator {
 
-    public RoomMonthlyChargeResult calculate(RoomMonthlyChargeInput input) {
-        if (input == null) {
+    public RoomMonthlyChargeResult calculate(Long roomId, YearMonth billingMonth, MeterReading reading) {
+        if (reading == null) {
             throw new IllegalArgumentException("Meter reading is required");
         }
-        if (input.billingMonth() == null) {
+        if (billingMonth == null) {
             throw new IllegalArgumentException("Billing month is required");
         }
-        if (input.roomId() == null) {
+        if (roomId == null) {
             throw new IllegalArgumentException("Room ID is required");
         }
-        if (!input.confirmed()) {
+        if (reading.getStatus() != ReadingStatus.CONFIRMED) {
             throw new IllegalArgumentException("Meter reading must be confirmed");
         }
 
-        validateCounters("electricity", input.electricityOld(), input.electricityNew());
-        validateCounters("water", input.waterOld(), input.waterNew());
-        validateUnitPrice("electricity", input.electricityUnitPrice());
-        validateUnitPrice("water", input.waterUnitPrice());
+        validateCounters("electricity", reading.getElectricityOld(), reading.getElectricityNew());
+        validateCounters("water", reading.getWaterOld(), reading.getWaterNew());
+        validateUnitPrice("electricity", reading.getElectricityPrice());
+        validateUnitPrice("water", reading.getWaterPrice());
 
-        BigDecimal electricityUsage = input.electricityNew().subtract(input.electricityOld());
-        BigDecimal waterUsage = input.waterNew().subtract(input.waterOld());
-        BigDecimal electricityAmount = electricityUsage.multiply(input.electricityUnitPrice())
+        BigDecimal electricityUsage = reading.getElectricityNew().subtract(reading.getElectricityOld());
+        BigDecimal waterUsage = reading.getWaterNew().subtract(reading.getWaterOld());
+        BigDecimal electricityAmount = electricityUsage.multiply(reading.getElectricityPrice())
                 .setScale(0, RoundingMode.HALF_UP);
-        BigDecimal waterAmount = waterUsage.multiply(input.waterUnitPrice())
+        BigDecimal waterAmount = waterUsage.multiply(reading.getWaterPrice())
                 .setScale(0, RoundingMode.HALF_UP);
 
         return new RoomMonthlyChargeResult(
-                input.roomId(),
-                input.billingMonth(),
+                roomId,
+                billingMonth,
                 electricityUsage,
                 waterUsage,
                 electricityAmount,

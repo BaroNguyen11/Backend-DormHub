@@ -12,9 +12,14 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "invoice_details")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class InvoiceDetail {
 
     @Id
@@ -42,9 +47,6 @@ public class InvoiceDetail {
     @Column(name = "amount", nullable = false, precision = 38, scale = 0)
     private BigDecimal amount;
 
-    protected InvoiceDetail() {
-    }
-
     public InvoiceDetail(InvoiceItemType itemType, String description,
             BigDecimal quantity, BigDecimal unitPrice, BigDecimal amount) {
         this.itemType = itemType;
@@ -58,27 +60,4 @@ public class InvoiceDetail {
         this.invoice = invoice;
     }
 
-    public Long getDetailId() {
-        return detailId;
-    }
-
-    public InvoiceItemType getItemType() {
-        return itemType;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public BigDecimal getQuantity() {
-        return quantity;
-    }
-
-    public BigDecimal getUnitPrice() {
-        return unitPrice;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
 }

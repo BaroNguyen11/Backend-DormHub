@@ -2,6 +2,8 @@ package com.dormhub.controller;
 
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
 import com.dormhub.service.RoomMonthlyChargeService;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -9,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Local development endpoint. SECURITY_PENDING: add authorization before deployment. */
 @RestController
 @RequestMapping("/api/v1/room-monthly-charges")
 public class RoomMonthlyChargeController {
@@ -22,8 +23,8 @@ public class RoomMonthlyChargeController {
 
     @GetMapping
     public RoomMonthlyChargeResult calculate(
-            @RequestParam Long roomId,
-            @RequestParam String month) {
+            @RequestParam @Positive Long roomId,
+            @RequestParam @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])") String month) {
         try {
             return service.calculate(roomId, YearMonth.parse(month));
         } catch (DateTimeParseException exception) {

@@ -22,10 +22,15 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "invoices", uniqueConstraints = @UniqueConstraint(
         name = "uk_invoices_room_month", columnNames = {"room_id", "billing_month"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Invoice {
 
     @Id
@@ -46,14 +51,17 @@ public class Invoice {
     private Contract contract;
 
     @Convert(converter = YearMonthAttributeConverter.class)
-    @Column(name = "billing_month", nullable = false)
+    @Column(name = "billing_month")
     private YearMonth billingMonth;
 
     @Column(name = "issue_date", nullable = false)
     private LocalDateTime issueDate;
 
-    @Column(name = "due_date", nullable = false)
+    @Column(name = "due_date")
     private LocalDateTime dueDate;
+
+    @Column(name = "deposit_marker")
+    private Short depositMarker;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
@@ -64,9 +72,6 @@ public class Invoice {
 
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InvoiceDetail> details = new ArrayList<>();
-
-    protected Invoice() {
-    }
 
     public Invoice(Room room, YearMonth billingMonth, LocalDateTime issueDate, BigDecimal totalAmount) {
         this.invoiceType = InvoiceType.UTILITY;
@@ -88,37 +93,20 @@ public class Invoice {
         this.totalAmount = totalAmount;
     }
 
+    public static Invoice deposit(Contract contract, LocalDateTime issueDate, BigDecimal totalAmount) {
+        Invoice invoice = new Invoice();
+        invoice.invoiceType = InvoiceType.DEPOSIT;
+        invoice.contract = contract;
+        invoice.issueDate = issueDate;
+        invoice.status = InvoiceStatus.UNPAID;
+        invoice.totalAmount = totalAmount;
+        invoice.depositMarker = (short) 1;
+        return invoice;
+    }
+
     public void addDetail(InvoiceDetail detail) {
         details.add(detail);
         detail.setInvoice(this);
-    }
-
-    public Long getInvoiceId() {
-        return invoiceId;
-    }
-
-    public InvoiceType getInvoiceType() {
-        return invoiceType;
-    }
-
-    public Room getRoom() {
-        return room;
-    }
-
-    public Contract getContract() { return contract; }
-    public LocalDateTime getDueDate() { return dueDate; }
-    public InvoiceStatus getStatus() { return status; }
-
-    public YearMonth getBillingMonth() {
-        return billingMonth;
-    }
-
-    public LocalDateTime getIssueDate() {
-        return issueDate;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
     }
 
     public List<InvoiceDetail> getDetails() {

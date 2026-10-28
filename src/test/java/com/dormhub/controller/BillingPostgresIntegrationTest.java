@@ -7,6 +7,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.ContractStatus;
+import com.dormhub.entity.Invoice;
+import com.dormhub.entity.InvoiceDetail;
+import com.dormhub.entity.InvoiceItemType;
+import com.dormhub.entity.InvoiceType;
 import com.dormhub.entity.MeterReading;
 import com.dormhub.entity.ReadingStatus;
 import com.dormhub.entity.Room;
@@ -55,7 +59,7 @@ class BillingPostgresIntegrationTest {
         Room room = rooms.saveAndFlush(new Room());
         Contract contract = contracts.saveAndFlush(new Contract(room,
                 LocalDateTime.of(2099, 1, 1, 0, 0), LocalDateTime.of(2099, 12, 31, 23, 59),
-                new BigDecimal("1500000"), ContractStatus.ACTIVE));
+                new BigDecimal("1500000"), new BigDecimal("500000"), ContractStatus.ACTIVE));
         readings.saveAndFlush(new MeterReading(room, YearMonth.of(2099, 10),
                 new BigDecimal("100"), new BigDecimal("120"),
                 new BigDecimal("10"), new BigDecimal("13"),
@@ -73,15 +77,28 @@ class BillingPostgresIntegrationTest {
                 + ",\"billingMonth\":\"2099-10\"}";
         mvc.perform(post("/api/v1/invoices").contentType(MediaType.APPLICATION_JSON).content(roomFee))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.totalAmount").value(1500000));
+        String deposit = "{\"invoiceType\":\"DEPOSIT\",\"contractId\":" + contract.getContractId() + "}";
+        mvc.perform(post("/api/v1/invoices").contentType(MediaType.APPLICATION_JSON).content(deposit))
+                .andExpect(status().isNotImplemented());
+        Invoice existingDeposit = Invoice.deposit(contract, LocalDateTime.of(2099, 10, 31, 12, 0),
+                new BigDecimal("500000"));
+        existingDeposit.addDetail(new InvoiceDetail(InvoiceItemType.DEPOSIT, "Deposit", BigDecimal.ONE,
+                new BigDecimal("500000"), new BigDecimal("500000")));
+        Long depositId = invoices.saveAndFlush(existingDeposit).getInvoiceId();
         mvc.perform(get("/api/v1/invoices").param("month", "2099-10"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2));
         Long invoiceId = invoices.findAll().stream()
-                .filter(invoice -> invoice.getContract() != null
+                .filter(invoice -> invoice.getInvoiceType() == InvoiceType.ROOM_FEE
+                        && invoice.getContract() != null
                         && invoice.getContract().getContractId().equals(contract.getContractId()))
                 .findFirst().orElseThrow().getInvoiceId();
         mvc.perform(get("/api/v1/invoices/{id}", invoiceId))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.details[0].itemType").value("ROOM"));
+        mvc.perform(get("/api/v1/invoices/{id}", depositId))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.details[0].itemType").value("DEPOSIT"));
         mvc.perform(post("/api/v1/invoices").contentType(MediaType.APPLICATION_JSON).content(utility))
                 .andExpect(status().isConflict());
+        mvc.perform(post("/api/v1/invoices").contentType(MediaType.APPLICATION_JSON).content(deposit))
+                .andExpect(status().isNotImplemented());
     }
 }

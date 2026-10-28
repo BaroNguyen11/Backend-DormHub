@@ -1,7 +1,6 @@
 package com.dormhub.service.impl;
 
 import com.dormhub.dto.request.InvoiceCreateRequest;
-import com.dormhub.dto.request.RoomMonthlyChargeInput;
 import com.dormhub.dto.response.InvoiceDetailResponse;
 import com.dormhub.dto.response.InvoicePageResponse;
 import com.dormhub.dto.response.InvoiceResponse;
@@ -39,6 +38,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class InvoiceServiceImpl implements InvoiceService {
@@ -64,38 +65,41 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Override
     @Transactional
     public InvoiceResponse create(InvoiceCreateRequest request) {
-        if (request == null || request.invoiceType() == null || request.invoiceType().isBlank()) {
+        if (request == null || request.getInvoiceType() == null || request.getInvoiceType().isBlank()) {
             throw new IllegalArgumentException("invoiceType is required");
         }
-        InvoiceType type = parseType(request.invoiceType());
-        YearMonth month = parseMonth(request.billingMonth());
+        InvoiceType type = parseType(request.getInvoiceType());
+        if (type == InvoiceType.DEPOSIT) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED,
+                    "DEPOSIT invoice creation is not supported in this phase");
+        }
+        YearMonth month = parseMonth(request.getBillingMonth());
         if (type == InvoiceType.ROOM_FEE) {
             return createRoomFee(request, month);
         }
-        if (request.contractId() != null) {
+        if (request.getContractId() != null) {
             throw new IllegalArgumentException("contractId is only valid for ROOM_FEE");
         }
-        if (request.roomId() == null || request.roomId() <= 0) {
+        if (request.getRoomId() == null || request.getRoomId() <= 0) {
             throw new IllegalArgumentException("A positive roomId is required");
         }
-        Room room = roomRepository.findById(request.roomId())
+        Room room = roomRepository.findById(request.getRoomId())
                 .orElseThrow(() -> new InvoiceNotFoundException("Room does not exist"));
         MeterReading reading = meterReadingRepository
-                .findByRoom_RoomIdAndReadingMonth(request.roomId(), month)
-                .orElseThrow(() -> new InvoiceNotFoundException("Meter reading does not exist"));
+                .findByRoom_RoomIdAndReadingMonth(request.getRoomId(), month);
+        if (reading == null) {
+            throw new InvoiceNotFoundException("Meter reading does not exist");
+        }
         if (reading.getStatus() != ReadingStatus.CONFIRMED) {
             throw new InvoiceConflictException("Meter reading is not confirmed");
         }
-        if (invoiceRepository.existsByRoom_RoomIdAndBillingMonth(request.roomId(), month)) {
+        if (invoiceRepository.existsByRoom_RoomIdAndBillingMonth(request.getRoomId(), month)) {
             throw new InvoiceConflictException("UTILITY invoice already exists for this room and month");
         }
 
         RoomMonthlyChargeResult charge;
         try {
-            charge = calculator.calculate(new RoomMonthlyChargeInput(
-                    request.roomId(), month, true,
-                    reading.getElectricityOld(), reading.getElectricityNew(), reading.getElectricityPrice(),
-                    reading.getWaterOld(), reading.getWaterNew(), reading.getWaterPrice()));
+            charge = calculator.calculate(request.getRoomId(), month, reading);
         } catch (IllegalArgumentException exception) {
             throw new InvoiceConflictException(exception.getMessage());
         }
@@ -119,10 +123,10 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private InvoiceResponse createRoomFee(InvoiceCreateRequest request, YearMonth month) {
-        if (request.contractId() == null || request.contractId() <= 0 || request.roomId() != null) {
+        if (request.getContractId() == null || request.getContractId() <= 0 || request.getRoomId() != null) {
             throw new IllegalArgumentException("ROOM_FEE requires a positive contractId and no roomId");
         }
-        Contract contract = contractRepository.findById(request.contractId())
+        Contract contract = contractRepository.findById(request.getContractId())
                 .orElseThrow(() -> new InvoiceNotFoundException("Contract does not exist"));
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
@@ -134,7 +138,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         if (contract.getMonthlyRent() == null || contract.getMonthlyRent().signum() < 0) {
             throw new InvoiceConflictException("Contract monthly rent is invalid");
         }
-        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.contractId(), month)) {
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
             throw new InvoiceConflictException("ROOM_FEE invoice already exists for this contract and month");
         }
         BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
@@ -176,7 +180,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         try {
             return InvoiceType.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException exception) {
-            throw new IllegalArgumentException("invoiceType must be UTILITY or ROOM_FEE", exception);
+            throw new IllegalArgumentException("invoiceType must be UTILITY, ROOM_FEE or DEPOSIT", exception);
         }
     }
 
@@ -220,7 +224,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private boolean overdue(Invoice invoice) {
-        return invoice.getStatus() == InvoiceStatus.UNPAID
+        return invoice.getDueDate() != null && invoice.getStatus() == InvoiceStatus.UNPAID
                 && invoice.getDueDate().toLocalDate().isBefore(LocalDate.now(BUSINESS_ZONE));
     }
 }

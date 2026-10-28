@@ -1,6 +1,5 @@
 package com.dormhub.service.impl;
 
-import com.dormhub.dto.request.RoomMonthlyChargeInput;
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
 import com.dormhub.entity.MeterReading;
 import com.dormhub.entity.ReadingStatus;
@@ -34,24 +33,18 @@ public class RoomMonthlyChargeServiceImpl implements RoomMonthlyChargeService {
         }
 
         MeterReading reading = meterReadingRepository
-                .findByRoom_RoomIdAndReadingMonth(roomId, billingMonth)
-                .orElseThrow(() -> new RoomMonthlyChargeNotFoundException(roomId, billingMonth));
+                .findByRoom_RoomIdAndReadingMonth(roomId, billingMonth);
+
+        if (reading == null) {
+            throw new RoomMonthlyChargeNotFoundException(roomId, billingMonth);
+        }
 
         if (reading.getStatus() != ReadingStatus.CONFIRMED) {
             throw new RoomMonthlyChargeUnavailableException("Meter reading is not confirmed");
         }
 
         try {
-            return calculator.calculate(new RoomMonthlyChargeInput(
-                    roomId,
-                    billingMonth,
-                    true,
-                    reading.getElectricityOld(),
-                    reading.getElectricityNew(),
-                    reading.getElectricityPrice(),
-                    reading.getWaterOld(),
-                    reading.getWaterNew(),
-                    reading.getWaterPrice()));
+            return calculator.calculate(roomId, billingMonth, reading);
         } catch (IllegalArgumentException exception) {
             throw new RoomMonthlyChargeUnavailableException(exception.getMessage());
         }

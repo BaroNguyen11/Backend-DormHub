@@ -10,10 +10,15 @@ import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "prices", uniqueConstraints = @UniqueConstraint(
         name = "uk_prices_type_effective_from", columnNames = {"type", "effective_from"}))
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Prices {
 
     @Id
@@ -39,9 +44,6 @@ public class Prices {
     @Column(name = "note")
     private String note;
 
-    protected Prices() {
-    }
-
     public Prices(String pricesId, PriceType type, BigDecimal unitPrice, LocalDate effectiveFrom,
             LocalDateTime createdAt, String createdBy, String note) {
         this.pricesId = pricesId;
@@ -53,31 +55,4 @@ public class Prices {
         this.note = note;
     }
 
-    public String getPricesId() {
-        return pricesId;
-    }
-
-    public PriceType getType() {
-        return type;
-    }
-
-    public BigDecimal getUnitPrice() {
-        return unitPrice;
-    }
-
-    public LocalDate getEffectiveFrom() {
-        return effectiveFrom;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public String getCreatedBy() {
-        return createdBy;
-    }
-
-    public String getNote() {
-        return note;
-    }
 }

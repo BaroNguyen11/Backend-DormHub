@@ -237,6 +237,14 @@ class InvoiceControllerTest {
     void validatesCreateAndReadRequests() throws Exception {
         mockMvc.perform(post("/api/v1/invoices")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"invoiceType\":\"\",\"roomId\":1,\"billingMonth\":\"2026-10\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/invoices")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"invoiceType\":\"UTILITY\",\"roomId\":1,\"contractId\":2,\"billingMonth\":\"2026-10\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/invoices")
+                        .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"invoiceType\":\"UTILITY\",\"roomId\":0,\"billingMonth\":\"2026-10\"}"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/v1/invoices")
