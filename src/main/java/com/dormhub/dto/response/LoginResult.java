@@ -10,4 +10,5 @@ public class LoginResult {
 
     private final LoginResponse user;
     private final String accessToken;
+    private String refreshToken;
 }

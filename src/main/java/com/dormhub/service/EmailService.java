@@ -44,4 +44,33 @@ public class EmailService {
 
         mailSender.send(message);
     }
+
+    public void sendPasswordResetOtp(String toEmail, String otp) {
+
+        SimpleMailMessage message = new SimpleMailMessage();
+
+        message.setFrom(senderEmail);
+        message.setTo(toEmail);
+        message.setSubject("DormHub - Đặt lại mật khẩu");
+
+        message.setText("""
+            Xin chào,
+
+            Bạn đã yêu cầu đặt lại mật khẩu tài khoản DormHub.
+
+            Mã OTP đặt lại mật khẩu của bạn là: %s
+
+            Mã OTP có hiệu lực trong 5 phút.
+            Vui lòng không chia sẻ mã này với bất kỳ ai.
+
+            Nếu bạn không thực hiện yêu cầu này,
+            vui lòng bỏ qua email.
+
+            Trân trọng,
+            DormHub
+            """.formatted(otp));
+
+        mailSender.send(message);
+    }
+
 }

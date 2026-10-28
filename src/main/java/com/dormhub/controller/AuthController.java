@@ -1,10 +1,8 @@
 package com.dormhub.controller;
 
-import com.dormhub.dto.request.LoginRequest;
-import com.dormhub.dto.request.RegisterRequest;
-import com.dormhub.dto.request.ResendOtpRequest;
-import com.dormhub.dto.request.VerifyOtpRequest;
+import com.dormhub.dto.request.*;
 import com.dormhub.dto.response.*;
+import com.dormhub.entity.User;
 import com.dormhub.service.AuthService;
 
 import jakarta.validation.Valid;
@@ -15,9 +13,12 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -73,7 +74,7 @@ public class AuthController {
 
         LoginResult result = authService.login(request);
 
-        ResponseCookie cookie = ResponseCookie
+        ResponseCookie accessCookie = ResponseCookie
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
                 .secure(cookieSecure)
@@ -81,14 +82,132 @@ public class AuthController {
                 .maxAge(Duration.ofMinutes(accessTokenMinutes))
                 .sameSite("Lax")
                 .build();
+        ResponseCookie refreshCookie = ResponseCookie
+                .from("refresh_token", result.getRefreshToken())
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api/v1/auth")
+                .maxAge(Duration.ofDays(7))
+                .sameSite("Lax")
+                .build();
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(ApiResponse.success(
-                        "Đăng nhập thành công",
-                        result.getUser()
-                ));
+                .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .body(
+                        ApiResponse.success(
+                                "Đăng nhập thành công",
+                                result.getUser()
+                        )
+                );
     }
 
+    @GetMapping("/csrf")
+    public ResponseEntity<ApiResponse<Map<String, String>>> getCsrfToken(CsrfToken csrfToken) {
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Lấy CSRF token thành công", Map.of("token", csrfToken.getToken()))
+        );
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<LoginResponse>> getCurrentUser(
+            @AuthenticationPrincipal User user) {
+
+        LoginResponse response = new LoginResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus()
+        );
+
+        return ResponseEntity.ok(
+                ApiResponse.success(
+                        "Lấy thông tin tài khoản thành công",
+                        response
+                )
+        );
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<?>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+
+        authService.forgotPassword(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu sẽ được gửi đến email của bạn.", null
+                )
+        );
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<?>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+
+        authService.resetPassword(request);
+
+        return ResponseEntity.ok(ApiResponse.success("Đặt lại mật khẩu thành công", null));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<?>> logout() {
+
+        ResponseCookie clearedCookie = ResponseCookie
+                .from("access_token", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(Duration.ZERO)
+                .sameSite("Lax")
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, clearedCookie.toString())
+                .body(
+                        ApiResponse.success(
+                                "Đăng xuất thành công",
+                                null
+                        )
+                );
+    }
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<LoginResponse>> refresh(
+            @CookieValue(
+                    name = "refresh_token",
+                    required = false
+            ) String refreshToken
+    ) {
+        LoginResult result = authService.refresh(refreshToken);
+
+        ResponseCookie accessCookie = ResponseCookie
+                .from("access_token", result.getAccessToken())
+                .httpOnly(true)
+                .secure(cookieSecure) // Dùng cùng cấu hình như login
+                .path("/")
+                .maxAge(Duration.ofMinutes(15))
+                .sameSite("Lax")
+                .build();
+
+        ResponseCookie refreshCookie = ResponseCookie
+                .from("refresh_token", result.getRefreshToken())
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api/v1/auth")
+                .maxAge(Duration.ofDays(7))
+                .sameSite("Lax")
+                .build();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, accessCookie.toString())
+                .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
+                .body(
+                        ApiResponse.success(
+                                "Làm mới token thành công",
+                                result.getUser()
+                        )
+                );
+    }
 
 }

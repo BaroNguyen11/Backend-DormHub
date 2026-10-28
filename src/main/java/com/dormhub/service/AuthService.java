@@ -1,9 +1,6 @@
 package com.dormhub.service;
 
-import com.dormhub.dto.request.LoginRequest;
-import com.dormhub.dto.request.RegisterRequest;
-import com.dormhub.dto.request.ResendOtpRequest;
-import com.dormhub.dto.request.VerifyOtpRequest;
+import com.dormhub.dto.request.*;
 import com.dormhub.dto.response.LoginResponse;
 import com.dormhub.dto.response.LoginResult;
 import com.dormhub.dto.response.RegisterResponse;
@@ -39,6 +36,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final RefreshTokenService refreshTokenService;
     private final EmailVerificationRepository emailVerificationRepository;
     private static final int MAX_OTP_ATTEMPTS = 5;
     private final JwtService jwtService;
@@ -239,7 +237,96 @@ public class AuthService {
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest request) {
+
+        // 1. Chuẩn hóa email
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        // 2. Tìm tài khoản
+        User user = userRepository.findByEmail(email).orElse(null);
+
+        // 3. Không xử lý nếu tài khoản không tồn tại
+        // hoặc chưa ở trạng thái ACTIVE
+        if (user == null || user.getStatus() != UserStatus.ACTIVE) {
+            return;
+        }
+
+        // 4. Giới hạn gửi OTP: tối đa một lần mỗi 60 giây
+        LocalDateTime now = LocalDateTime.now();
+
+        EmailVerification latestVerification = emailVerificationRepository.findTopByUserIdAndPurposeOrderByCreatedAtDesc(
+                                user.getId(),
+                                OtpPurpose.RESET_PASSWORD
+                        ).orElse(null);
+
+        if (latestVerification != null
+                && latestVerification.getCreatedAt() != null
+                && latestVerification.getCreatedAt()
+                .isAfter(now.minusSeconds(60))) {
+            return;
+        }
+
+        // 5. Tạo OTP và lưu hash vào database
+        String otp = otpService.createOtp(user, OtpPurpose.RESET_PASSWORD);
+
+        // 6. Gửi OTP đặt lại mật khẩu
+        emailService.sendPasswordResetOtp(user.getEmail(), otp);
+    }
+
+    @Transactional(noRollbackFor = AppException.class)
+    public void resetPassword(ResetPasswordRequest request) {
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+
+        // 1. Tìm tài khoản
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new AppException(ErrorCode.OTP_INVALID));
+
+        // 2. Chỉ tài khoản đang hoạt động mới được đổi mật khẩu
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        // 3. Lấy OTP mới nhất của mục đích RESET_PASSWORD
+        EmailVerification verification = emailVerificationRepository.findTopByUserIdAndPurposeOrderByCreatedAtDesc(user.getId(), OtpPurpose.RESET_PASSWORD)
+                        .orElseThrow(() -> new AppException(ErrorCode.OTP_INVALID));
+
+        // 4. Kiểm tra OTP đã được sử dụng chưa
+        if (verification.getUsedAt() != null) {
+            throw new AppException(ErrorCode.OTP_ALREADY_USED);
+        }
+
+        // 5. Kiểm tra số lần nhập sai
+        if (verification.getAttempts() >= MAX_OTP_ATTEMPTS) {
+            throw new AppException(ErrorCode.OTP_MAX_ATTEMPTS);
+        }
+
+        // 6. Kiểm tra thời hạn OTP
+        LocalDateTime now = LocalDateTime.now();
+
+        if (!verification.getExpiresAt().isAfter(now)) {
+            throw new AppException(ErrorCode.OTP_EXPIRED);
+        }
+
+        // 7. So sánh OTP người dùng nhập với OTP đã được hash
+        boolean otpMatches = passwordEncoder.matches(request.getOtp(), verification.getOtpHash());
+
+        if (!otpMatches) {
+            verification.setAttempts(verification.getAttempts() + 1);
+            emailVerificationRepository.save(verification);
+
+            throw new AppException(ErrorCode.OTP_INVALID);
+        }
+
+        // 8. Đánh dấu OTP đã sử dụng
+        verification.setUsedAt(now);
+        emailVerificationRepository.save(verification);
+
+        // 9. Hash mật khẩu mới rồi cập nhật tài khoản
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+    }
+
+    @Transactional()
     public LoginResult login(LoginRequest request) {
 
         String email = request.getEmail()
@@ -274,7 +361,38 @@ public class AuthService {
 
         String accessToken = jwtService.generateAccessToken(user);
 
-        return new LoginResult(userResponse, accessToken);
-    }
+        String refreshToken = refreshTokenService.createRefreshToken(user);
 
+        return new LoginResult(
+                userResponse,
+                accessToken,
+                refreshToken
+        );
+    }
+    @Transactional(readOnly = false)
+    public LoginResult refresh(String rawRefreshToken) {
+        // Kiểm tra, thu hồi token cũ và tạo refresh token mới
+        RefreshTokenService.RotationResult rotation = refreshTokenService.rotateRefreshToken(rawRefreshToken);
+
+        User user = rotation.user();
+
+        // Tạo access token mới
+        String accessToken = jwtService.generateAccessToken(user);
+
+        // Tạo lại thông tin người dùng theo cách method login() đang làm
+        LoginResponse userResponse = new LoginResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getFullName(),
+                user.getRole(),
+                user.getStatus()
+        );
+
+        return new LoginResult(
+                userResponse,
+                accessToken,
+                rotation.refreshToken()
+        );
+    }
 }
