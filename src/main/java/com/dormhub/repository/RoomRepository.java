@@ -1,5 +1,8 @@
 package com.dormhub.repository;
 
-public class RoomRepository {
+import com.dormhub.entity.Room;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface RoomRepository extends JpaRepository<Room,Long> {
     
 }
