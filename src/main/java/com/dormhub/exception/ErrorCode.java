@@ -49,7 +49,8 @@ public enum ErrorCode {
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
 
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
-
+    ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    MAINTENANCE_INVALID_STATUS(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
     // Database
     DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu xung đột hoặc vi phạm ràng buộc"),
 
