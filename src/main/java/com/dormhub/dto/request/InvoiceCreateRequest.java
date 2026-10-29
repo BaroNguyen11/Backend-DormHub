@@ -5,15 +5,11 @@ import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
+import lombok.Data;
 
 import java.util.Locale;
 
-@Getter
-@Setter
-@NoArgsConstructor
+@Data
 public class InvoiceCreateRequest {
 
     @NotBlank

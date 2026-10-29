@@ -9,6 +9,7 @@ import com.dormhub.repository.MeterReadingRepository;
 import com.dormhub.service.RoomMonthlyChargeCalculator;
 import com.dormhub.service.RoomMonthlyChargeService;
 import java.time.YearMonth;
+import java.time.format.DateTimeParseException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,9 +28,15 @@ public class RoomMonthlyChargeServiceImpl implements RoomMonthlyChargeService {
 
     @Override
     @Transactional(readOnly = true)
-    public RoomMonthlyChargeResult calculate(Long roomId, YearMonth billingMonth) {
-        if (roomId == null || roomId <= 0 || billingMonth == null) {
+    public RoomMonthlyChargeResult calculate(Long roomId, String month) {
+        if (roomId == null || roomId <= 0 || month == null) {
             throw new IllegalArgumentException("A positive room ID and billing month are required");
+        }
+        YearMonth billingMonth;
+        try {
+            billingMonth = YearMonth.parse(month);
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException("month must use YYYY-MM", exception);
         }
 
         MeterReading reading = meterReadingRepository

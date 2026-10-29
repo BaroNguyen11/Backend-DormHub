@@ -169,7 +169,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional(readOnly = true)
     public InvoiceResponse get(Long invoiceId) {
         if (invoiceId == null || invoiceId <= 0) {
-            throw new IllegalArgumentException("A positive invoiceId is required");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "A positive invoiceId is required");
         }
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new InvoiceNotFoundException("Invoice does not exist"));

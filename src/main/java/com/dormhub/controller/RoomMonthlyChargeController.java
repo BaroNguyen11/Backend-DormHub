@@ -1,14 +1,12 @@
 package com.dormhub.controller;
 
+import com.dormhub.dto.request.RoomMonthlyChargeRequest;
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
 import com.dormhub.service.RoomMonthlyChargeService;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Positive;
-import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
-import org.springframework.web.bind.annotation.GetMapping;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -21,14 +19,8 @@ public class RoomMonthlyChargeController {
         this.service = service;
     }
 
-    @GetMapping
-    public RoomMonthlyChargeResult calculate(
-            @RequestParam @Positive Long roomId,
-            @RequestParam @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])") String month) {
-        try {
-            return service.calculate(roomId, YearMonth.parse(month));
-        } catch (DateTimeParseException exception) {
-            throw new IllegalArgumentException("month must use YYYY-MM", exception);
-        }
+    @PostMapping
+    public RoomMonthlyChargeResult calculate(@Valid @RequestBody RoomMonthlyChargeRequest request) {
+        return service.calculate(request.getRoomId(), request.getMonth());
     }
 }
