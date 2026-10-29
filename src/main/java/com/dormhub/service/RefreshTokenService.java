@@ -101,4 +101,23 @@ public class RefreshTokenService {
 
         return new RotationResult(user, newRefreshToken);
     }
+    @Transactional
+    public void revokeRefreshToken(String rawToken) {
+        // Không có refresh token thì không cần thu hồi
+        if (rawToken == null || rawToken.isBlank()) {
+            return;
+        }
+
+        // Hash token để tìm bản ghi trong database
+        String tokenHash = hashToken(rawToken);
+
+        refreshTokenRepository.findByTokenHash(tokenHash)
+                .ifPresent(token -> {
+                    // Chỉ thu hồi nếu token chưa bị thu hồi
+                    if (token.getRevokedAt() == null) {
+                        token.setRevokedAt(LocalDateTime.now());
+                        refreshTokenRepository.save(token);
+                    }
+                });
+    }
 }

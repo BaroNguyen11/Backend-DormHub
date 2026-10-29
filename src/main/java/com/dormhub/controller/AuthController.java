@@ -152,9 +152,15 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<ApiResponse<?>> logout() {
+    public ResponseEntity<ApiResponse<?>> logout(
+            @CookieValue(value = "refresh_token", required = false)
+            String refreshToken
+    ) {
 
-        ResponseCookie clearedCookie = ResponseCookie
+        authService.logout(refreshToken);
+
+        // Xóa access token cookie
+        ResponseCookie clearedAccessCookie = ResponseCookie
                 .from("access_token", "")
                 .httpOnly(true)
                 .secure(false)
@@ -163,8 +169,22 @@ public class AuthController {
                 .sameSite("Lax")
                 .build();
 
+        // Xóa refresh token cookie
+        ResponseCookie clearedRefreshCookie = ResponseCookie
+                .from("refresh_token", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/api/v1/auth")
+                .maxAge(Duration.ZERO)
+                .sameSite("Lax")
+                .build();
+
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, clearedCookie.toString())
+                .header(
+                        HttpHeaders.SET_COOKIE,
+                        clearedAccessCookie.toString(),
+                        clearedRefreshCookie.toString()
+                )
                 .body(
                         ApiResponse.success(
                                 "Đăng xuất thành công",

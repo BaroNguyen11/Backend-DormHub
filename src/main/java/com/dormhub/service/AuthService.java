@@ -395,4 +395,8 @@ public class AuthService {
                 rotation.refreshToken()
         );
     }
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.revokeRefreshToken(rawRefreshToken);
+    }
 }

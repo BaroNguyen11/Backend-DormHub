@@ -1,10 +1,12 @@
 spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/dorm_hub
-    username: postgres
-    password: 123456
-    driver-class-name: org.postgresql.Driver
+  config:
+    import: optional:file:.env[.properties]
 
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 5
       minimum-idle: 1
@@ -16,6 +18,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
   mail:
     host: smtp.gmail.com
     port: 587
@@ -31,6 +34,7 @@ spring:
 logging:
   level:
     org.hibernate.SQL: DEBUG
+
 dormhub:
   jwt:
     secret: ${DORMHUB_JWT_SECRET}
