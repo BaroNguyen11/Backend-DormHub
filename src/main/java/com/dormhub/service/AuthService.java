@@ -296,7 +296,8 @@ public class AuthService {
         }
 
         // 5. Kiểm tra số lần nhập sai
-        if (verification.getAttempts() >= MAX_OTP_ATTEMPTS) {
+        int attempts = verification.getAttempts() == null ? 0 : verification.getAttempts();
+        if (attempts >= MAX_OTP_ATTEMPTS) {
             throw new AppException(ErrorCode.OTP_MAX_ATTEMPTS);
         }
 
