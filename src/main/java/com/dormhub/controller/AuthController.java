@@ -229,5 +229,15 @@ public class AuthController {
                         )
                 );
     }
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody ChangePasswordRequest request) {
 
+        authService.changePassword(user.getId(), request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Đổi mật khẩu thành công", null)
+        );
+    }
 }
