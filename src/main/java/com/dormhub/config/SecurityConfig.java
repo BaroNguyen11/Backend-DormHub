@@ -95,6 +95,13 @@ public class SecurityConfig {
                                         "/api/v1/auth/logout",
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/buildings",
+                                "/api/v1/buildings/**",
+                                "/api/v1/rooms",
+                                "/api/v1/rooms/**"
+                        ).permitAll()
+                        .requestMatchers("/api/v1/buildings/**", "/api/v1/rooms/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
