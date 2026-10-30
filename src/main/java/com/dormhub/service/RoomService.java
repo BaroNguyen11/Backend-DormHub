@@ -5,8 +5,10 @@ import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
+import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.repository.BuildingRepository;
+import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomRepository;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ public class RoomService {
 
     private final RoomRepository roomRepository;
     private final BuildingRepository buildingRepository;
+    private final DormApplicationRepository dormApplicationRepository;
 
     public Page<RoomResponse> search(
             Long buildingId,
@@ -126,6 +129,12 @@ public class RoomService {
         Building building = findBuilding(request.getBuildingId());
         requireGenderPolicy(building);
         String roomNumber = request.getRoomNumber().trim();
+        if (!room.getBuilding().getId().equals(building.getId())
+                && dormApplicationRepository.existsByRequestedRoomIdAndStatusIn(
+                        id, java.util.List.of(
+                                DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
+            throw new RuntimeException("Không thể chuyển phòng khi có đơn đang chọn phòng này");
+        }
         if (roomRepository.existsByBuildingIdAndRoomNumberAndIdNot(
                 building.getId(), roomNumber, id)) {
             throw new RuntimeException("Số phòng đã tồn tại trong tòa nhà này");
@@ -140,6 +149,9 @@ public class RoomService {
     public void delete(Long id) {
         Room room = roomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng"));
+        if (dormApplicationRepository.existsByRequestedRoomId(id)) {
+            throw new RuntimeException("Không thể xóa phòng đã được chọn trong đơn đăng ký");
+        }
         roomRepository.delete(room);
     }
 

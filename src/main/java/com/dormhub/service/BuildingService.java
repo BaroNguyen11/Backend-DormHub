@@ -3,6 +3,8 @@ package com.dormhub.service;
 import com.dormhub.dto.request.BuildingRequest;
 import com.dormhub.dto.response.BuildingResponse;
 import com.dormhub.entity.Building;
+import com.dormhub.entity.enums.DormApplicationStatus;
+import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.BuildingRepository;
 import com.dormhub.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ public class BuildingService {
 
     private final BuildingRepository buildingRepository;
     private final RoomRepository roomRepository;
+    private final DormApplicationRepository dormApplicationRepository;
 
     public List<BuildingResponse> getAll() {
         return buildingRepository.findAll().stream()
@@ -41,6 +44,11 @@ public class BuildingService {
     public BuildingResponse update(Long id, BuildingRequest request) {
         Building building = buildingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tòa nhà"));
+        if (building.getGenderPolicy() != request.getGenderPolicy()
+                && dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
+                        id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
+            throw new RuntimeException("Không thể đổi chính sách giới tính khi tòa có đơn đang xử lý");
+        }
         apply(building, request);
         return BuildingResponse.from(buildingRepository.save(building));
     }
