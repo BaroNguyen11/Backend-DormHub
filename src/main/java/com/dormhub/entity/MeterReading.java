@@ -1,5 +1,6 @@
 package com.dormhub.entity;
 
+import com.dormhub.entity.enums.ReadingStatus;
 import com.dormhub.config.YearMonthAttributeConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -17,15 +18,16 @@ import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "meter_readings", uniqueConstraints = @UniqueConstraint(
         name = "uk_meter_readings_room_month", columnNames = {"room_id", "reading_month"}))
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Setter
+@NoArgsConstructor
 public class MeterReading {
 
     @Id
@@ -65,22 +67,5 @@ public class MeterReading {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    public MeterReading(Room room, YearMonth readingMonth,
-            BigDecimal electricityOld, BigDecimal electricityNew,
-            BigDecimal waterOld, BigDecimal waterNew,
-            BigDecimal electricityPrice, BigDecimal waterPrice,
-            ReadingStatus status, LocalDateTime createdAt) {
-        this.room = room;
-        this.readingMonth = readingMonth;
-        this.electricityOld = electricityOld;
-        this.electricityNew = electricityNew;
-        this.waterOld = waterOld;
-        this.waterNew = waterNew;
-        this.electricityPrice = electricityPrice;
-        this.waterPrice = waterPrice;
-        this.status = status;
-        this.createdAt = createdAt;
-    }
 
 }

@@ -1,9 +1,11 @@
 package com.dormhub.controller;
 
 import com.dormhub.dto.request.RoomMonthlyChargeRequest;
+import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
 import com.dormhub.service.RoomMonthlyChargeService;
 import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +22,8 @@ public class RoomMonthlyChargeController {
     }
 
     @PostMapping
-    public RoomMonthlyChargeResult calculate(@Valid @RequestBody RoomMonthlyChargeRequest request) {
-        return service.calculate(request.getRoomId(), request.getMonth());
+    public ResponseEntity<ApiResponse<RoomMonthlyChargeResult>> calculate(
+            @Valid @RequestBody RoomMonthlyChargeRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(service.calculate(request.getRoomId(), request.getMonth())));
     }
 }

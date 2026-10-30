@@ -7,5 +7,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MeterReadingRepository extends JpaRepository<MeterReading, Long> {
 
-    MeterReading findByRoom_RoomIdAndReadingMonth(Long roomId, YearMonth readingMonth);
+    MeterReading findByRoom_IdAndReadingMonth(Long roomId, YearMonth readingMonth);
 }

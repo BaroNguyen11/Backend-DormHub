@@ -1,16 +1,18 @@
 package com.dormhub.entity;
 
+import com.dormhub.entity.enums.ContractStatus;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "contracts")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Setter
+@NoArgsConstructor
 public class Contract {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,20 +38,5 @@ public class Contract {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
     private ContractStatus status;
-
-    public Contract(Room room, LocalDateTime startDate, LocalDateTime endDate,
-            BigDecimal monthlyRent, ContractStatus status) {
-        this(room, startDate, endDate, monthlyRent, null, status);
-    }
-
-    public Contract(Room room, LocalDateTime startDate, LocalDateTime endDate,
-            BigDecimal monthlyRent, BigDecimal depositAmount, ContractStatus status) {
-        this.room = room;
-        this.startDate = startDate;
-        this.endDate = endDate;
-        this.monthlyRent = monthlyRent;
-        this.depositAmount = depositAmount;
-        this.status = status;
-    }
 
 }

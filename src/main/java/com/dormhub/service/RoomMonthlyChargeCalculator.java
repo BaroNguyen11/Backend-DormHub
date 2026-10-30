@@ -2,7 +2,9 @@ package com.dormhub.service;
 
 import com.dormhub.dto.response.RoomMonthlyChargeResult;
 import com.dormhub.entity.MeterReading;
-import com.dormhub.entity.ReadingStatus;
+import com.dormhub.entity.enums.ReadingStatus;
+import com.dormhub.exception.AppException;
+import com.dormhub.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.YearMonth;
@@ -13,16 +15,16 @@ public class RoomMonthlyChargeCalculator {
 
     public RoomMonthlyChargeResult calculate(Long roomId, YearMonth billingMonth, MeterReading reading) {
         if (reading == null) {
-            throw new IllegalArgumentException("Meter reading is required");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "Meter reading is required");
         }
         if (billingMonth == null) {
-            throw new IllegalArgumentException("Billing month is required");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "Billing month is required");
         }
         if (roomId == null) {
-            throw new IllegalArgumentException("Room ID is required");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "Room ID is required");
         }
         if (reading.getStatus() != ReadingStatus.CONFIRMED) {
-            throw new IllegalArgumentException("Meter reading must be confirmed");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "Meter reading must be confirmed");
         }
 
         validateCounters("electricity", reading.getElectricityOld(), reading.getElectricityNew());
@@ -49,19 +51,19 @@ public class RoomMonthlyChargeCalculator {
 
     private void validateCounters(String kind, BigDecimal oldValue, BigDecimal newValue) {
         if (oldValue == null || newValue == null) {
-            throw new IllegalArgumentException(kind + " counters are required");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, kind + " counters are required");
         }
         if (oldValue.signum() < 0 || newValue.signum() < 0) {
-            throw new IllegalArgumentException(kind + " counters must be nonnegative");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, kind + " counters must be nonnegative");
         }
         if (newValue.compareTo(oldValue) < 0) {
-            throw new IllegalArgumentException(kind + " new counter must not be below old counter");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, kind + " new counter must not be below old counter");
         }
     }
 
     private void validateUnitPrice(String kind, BigDecimal price) {
         if (price == null || price.signum() <= 0) {
-            throw new IllegalArgumentException(kind + " confirmed unit price must be positive");
+            throw new AppException(ErrorCode.BILLING_CONFLICT, kind + " confirmed unit price must be positive");
         }
     }
 }

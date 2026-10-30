@@ -1,5 +1,7 @@
 package com.dormhub.entity;
 
+import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.config.YearMonthAttributeConverter;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -20,17 +22,17 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "invoices", uniqueConstraints = @UniqueConstraint(
         name = "uk_invoices_room_month", columnNames = {"room_id", "billing_month"}))
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Setter
+@NoArgsConstructor
 public class Invoice {
 
     @Id
@@ -72,44 +74,4 @@ public class Invoice {
 
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<InvoiceDetail> details = new ArrayList<>();
-
-    public Invoice(Room room, YearMonth billingMonth, LocalDateTime issueDate, BigDecimal totalAmount) {
-        this.invoiceType = InvoiceType.UTILITY;
-        this.room = room;
-        this.billingMonth = billingMonth;
-        this.issueDate = issueDate;
-        this.dueDate = issueDate.plusDays(14);
-        this.status = InvoiceStatus.UNPAID;
-        this.totalAmount = totalAmount;
-    }
-
-    public Invoice(Contract contract, YearMonth billingMonth, LocalDateTime issueDate, BigDecimal totalAmount) {
-        this.invoiceType = InvoiceType.ROOM_FEE;
-        this.contract = contract;
-        this.billingMonth = billingMonth;
-        this.issueDate = issueDate;
-        this.dueDate = issueDate.plusDays(14);
-        this.status = InvoiceStatus.UNPAID;
-        this.totalAmount = totalAmount;
-    }
-
-    public static Invoice deposit(Contract contract, LocalDateTime issueDate, BigDecimal totalAmount) {
-        Invoice invoice = new Invoice();
-        invoice.invoiceType = InvoiceType.DEPOSIT;
-        invoice.contract = contract;
-        invoice.issueDate = issueDate;
-        invoice.status = InvoiceStatus.UNPAID;
-        invoice.totalAmount = totalAmount;
-        invoice.depositMarker = (short) 1;
-        return invoice;
-    }
-
-    public void addDetail(InvoiceDetail detail) {
-        details.add(detail);
-        detail.setInvoice(this);
-    }
-
-    public List<InvoiceDetail> getDetails() {
-        return Collections.unmodifiableList(details);
-    }
 }

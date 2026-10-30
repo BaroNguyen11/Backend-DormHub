@@ -1,5 +1,6 @@
 package com.dormhub.entity;
 
+import com.dormhub.entity.enums.InvoiceItemType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -12,14 +13,15 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
-import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "invoice_details")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Setter
+@NoArgsConstructor
 public class InvoiceDetail {
 
     @Id
@@ -42,22 +44,10 @@ public class InvoiceDetail {
     private BigDecimal quantity;
 
     @Column(name = "unit_price", nullable = false, columnDefinition = "numeric")
+
     private BigDecimal unitPrice;
 
     @Column(name = "amount", nullable = false, precision = 38, scale = 0)
     private BigDecimal amount;
-
-    public InvoiceDetail(InvoiceItemType itemType, String description,
-            BigDecimal quantity, BigDecimal unitPrice, BigDecimal amount) {
-        this.itemType = itemType;
-        this.description = description;
-        this.quantity = quantity;
-        this.unitPrice = unitPrice;
-        this.amount = amount;
-    }
-
-    void setInvoice(Invoice invoice) {
-        this.invoice = invoice;
-    }
 
 }

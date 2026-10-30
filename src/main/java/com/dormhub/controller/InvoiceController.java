@@ -2,13 +2,12 @@ package com.dormhub.controller;
 
 import com.dormhub.dto.request.InvoiceCreateRequest;
 import com.dormhub.dto.request.InvoiceFilterRequest;
+import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.InvoicePageResponse;
 import com.dormhub.dto.response.InvoiceResponse;
 import com.dormhub.service.InvoiceService;
 import jakarta.validation.Valid;
 import java.net.URI;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,22 +27,19 @@ public class InvoiceController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@Valid @RequestBody InvoiceCreateRequest request) {
-        if ("DEPOSIT".equalsIgnoreCase(request.getInvoiceType().trim())) {
-            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body(ProblemDetail.forStatusAndDetail(
-                    HttpStatus.NOT_IMPLEMENTED, "DEPOSIT invoice creation is not supported in this phase"));
-        }
+    public ResponseEntity<ApiResponse<InvoiceResponse>> create(@Valid @RequestBody InvoiceCreateRequest request) {
         InvoiceResponse response = service.create(request);
-        return ResponseEntity.created(URI.create("/api/v1/invoices/" + response.invoiceId())).body(response);
+        return ResponseEntity.created(URI.create("/api/v1/invoices/" + response.getInvoiceId()))
+                .body(ApiResponse.success("Tạo hóa đơn thành công", response));
     }
 
     @GetMapping
-    public InvoicePageResponse list(@Valid InvoiceFilterRequest request) {
-        return service.list(request.getMonth(), request.getPage(), request.getSize());
+    public ResponseEntity<ApiResponse<InvoicePageResponse>> list(@Valid InvoiceFilterRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(service.list(request.getMonth(), request.getPage(), request.getSize())));
     }
 
     @GetMapping("/{id}")
-    public InvoiceResponse get(@PathVariable Long id) {
-        return service.get(id);
+    public ResponseEntity<ApiResponse<InvoiceResponse>> get(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(service.get(id)));
     }
 }
