@@ -9,8 +9,10 @@ import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.repository.DormApplicationRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,8 @@ public class DormApplicationService {
     private final DormApplicationRepository dormApplicationRepository;
     private final StudentRepository studentRepository;
     private final RoomRepository roomRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
+    private final RoomAssignmentService roomAssignmentService;
 
     @Transactional
     public DormApplicationResponse submit(Long userId, DormApplicationRequest request) {
@@ -162,6 +166,9 @@ public class DormApplicationService {
         application.setStatus(request.getStatus());
         application.setReviewNote(normalizeNote(request.getNote()));
         application.setProcessedAt(LocalDateTime.now());
+        if (request.getStatus() == DormApplicationStatus.APPROVED) {
+            roomAssignmentService.assign(applicationId);
+        }
         return DormApplicationResponse.from(dormApplicationRepository.save(application));
     }
 
@@ -203,7 +210,9 @@ public class DormApplicationService {
                 || student.getGender() == Gender.FEMALE && policy != BuildingGenderPolicy.FEMALE_ONLY) {
             throw new RuntimeException("Phòng đã chọn không phù hợp với chính sách giới tính của tòa");
         }
-        if (room.getCapacity() < 1) {
+        long occupiedSlots = roomAssignmentRepository.countByRoomIdAndStatus(
+                room.getId(), RoomAssignmentStatus.ASSIGNED);
+        if (occupiedSlots >= room.getCapacity()) {
             throw new RuntimeException("Phòng đã đủ sức chứa");
         }
         return room;

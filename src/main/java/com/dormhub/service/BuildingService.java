@@ -4,15 +4,16 @@ import com.dormhub.dto.request.BuildingRequest;
 import com.dormhub.dto.response.BuildingResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.enums.DormApplicationStatus;
-import com.dormhub.repository.DormApplicationRepository;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.BuildingRepository;
+import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-
 
 @Service
 @RequiredArgsConstructor
@@ -21,6 +22,7 @@ public class BuildingService {
 
     private final BuildingRepository buildingRepository;
     private final RoomRepository roomRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
     private final DormApplicationRepository dormApplicationRepository;
 
     public List<BuildingResponse> getAll() {
@@ -45,9 +47,11 @@ public class BuildingService {
         Building building = buildingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy tòa nhà"));
         if (building.getGenderPolicy() != request.getGenderPolicy()
-                && dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
-                        id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
-            throw new RuntimeException("Không thể đổi chính sách giới tính khi tòa có đơn đang xử lý");
+                && (roomAssignmentRepository.existsByRoomBuildingIdAndStatus(
+                            id, RoomAssignmentStatus.ASSIGNED)
+                    || dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
+                            id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED)))) {
+            throw new RuntimeException("Không thể đổi chính sách giới tính khi tòa đang có phân phòng hoặc đơn đang xử lý");
         }
         apply(building, request);
         return BuildingResponse.from(buildingRepository.save(building));

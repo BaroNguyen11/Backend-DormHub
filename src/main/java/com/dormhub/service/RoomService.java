@@ -4,13 +4,18 @@ import com.dormhub.dto.request.RoomRequest;
 import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.Room;
+import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.repository.BuildingRepository;
 import com.dormhub.repository.DormApplicationRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +26,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +40,7 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final BuildingRepository buildingRepository;
     private final DormApplicationRepository dormApplicationRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
 
     public Page<RoomResponse> search(
             Long buildingId,
@@ -85,10 +94,16 @@ public class RoomService {
                                         criteriaBuilder.lower(buildingJoin.get("buildingName")), pattern)));
             }
             if (availableOnly) {
+                Subquery<Long> occupiedSlots = query.subquery(Long.class);
+                Root<RoomAssignment> assignment = occupiedSlots.from(RoomAssignment.class);
+                occupiedSlots.select(criteriaBuilder.count(assignment));
+                occupiedSlots.where(
+                        criteriaBuilder.equal(assignment.get("room").get("id"), root.get("id")),
+                        criteriaBuilder.equal(assignment.get("status"), RoomAssignmentStatus.ASSIGNED));
                 predicates = criteriaBuilder.and(
                         predicates,
                         criteriaBuilder.equal(root.get("status"), RoomStatus.ACTIVE),
-                        criteriaBuilder.greaterThan(root.<Integer>get("capacity"), 0));
+                        criteriaBuilder.gt(root.<Integer>get("capacity"), occupiedSlots));
             }
             return predicates;
         };
@@ -98,12 +113,13 @@ public class RoomService {
                 size,
                 Sort.by(Sort.Order.asc("building.buildingName"), Sort.Order.asc("roomNumber")));
 
-        return roomRepository.findAll(specification, pageable).map(room -> toResponse(room, 0));
+        return withAvailableSlots(roomRepository.findAll(specification, pageable));
     }
 
     public RoomResponse getById(Long id) {
         Room room = findRoom(id);
-        return toResponse(room, 0);
+        return toResponse(room, roomAssignmentRepository.countByRoomIdAndStatus(
+                id, RoomAssignmentStatus.ASSIGNED));
     }
 
     @Transactional
@@ -129,12 +145,21 @@ public class RoomService {
         Building building = findBuilding(request.getBuildingId());
         requireGenderPolicy(building);
         String roomNumber = request.getRoomNumber().trim();
+        long assignedCount = roomAssignmentRepository.countByRoomIdAndStatus(
+                id, RoomAssignmentStatus.ASSIGNED);
+
+        if (request.getCapacity() < assignedCount) {
+            throw new RuntimeException("Sức chứa mới không được thấp hơn số sinh viên đang được phân phòng");
+        }
+        if (!room.getBuilding().getId().equals(building.getId()) && assignedCount > 0) {
+            throw new RuntimeException("Không thể chuyển phòng sang tòa khác khi đang có sinh viên được phân phòng");
+        }
         if (!room.getBuilding().getId().equals(building.getId())
                 && dormApplicationRepository.existsByRequestedRoomIdAndStatusIn(
-                        id, java.util.List.of(
-                                DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
+                        id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
             throw new RuntimeException("Không thể chuyển phòng khi có đơn đang chọn phòng này");
         }
+
         if (roomRepository.existsByBuildingIdAndRoomNumberAndIdNot(
                 building.getId(), roomNumber, id)) {
             throw new RuntimeException("Số phòng đã tồn tại trong tòa nhà này");
@@ -142,15 +167,16 @@ public class RoomService {
 
         room.setBuilding(building);
         apply(room, request, roomNumber);
-        return toResponse(roomRepository.save(room), 0);
+        return toResponse(roomRepository.save(room), assignedCount);
     }
 
     @Transactional
     public void delete(Long id) {
         Room room = roomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng"));
-        if (dormApplicationRepository.existsByRequestedRoomId(id)) {
-            throw new RuntimeException("Không thể xóa phòng đã được chọn trong đơn đăng ký");
+        if (roomAssignmentRepository.existsByRoomId(id)
+                || dormApplicationRepository.existsByRequestedRoomId(id)) {
+            throw new RuntimeException("Không thể xóa phòng đã có lịch sử phân phòng");
         }
         roomRepository.delete(room);
     }
@@ -179,6 +205,19 @@ public class RoomService {
         if (building.getGenderPolicy() == null) {
             throw new RuntimeException("Cần thiết lập genderPolicy cho tòa nhà trước khi quản lý phòng");
         }
+    }
+
+    private Page<RoomResponse> withAvailableSlots(Page<Room> rooms) {
+        List<Long> roomIds = rooms.getContent().stream().map(Room::getId).toList();
+        Map<Long, Long> assignedCounts = roomIds.isEmpty()
+                ? Map.of()
+                : roomAssignmentRepository.countByRoomIdsAndStatus(roomIds, RoomAssignmentStatus.ASSIGNED)
+                        .stream()
+                        .collect(Collectors.toMap(
+                                row -> ((Number) row[0]).longValue(),
+                                row -> ((Number) row[1]).longValue()));
+
+        return rooms.map(room -> toResponse(room, assignedCounts.getOrDefault(room.getId(), 0L)));
     }
 
     private RoomResponse toResponse(Room room, long assignedCount) {
