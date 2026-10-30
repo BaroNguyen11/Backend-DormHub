@@ -27,8 +27,8 @@ public class DormApplication {
             foreignKey = @ForeignKey(name = "fk_dorm_applications_student"))
     private Student student;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "requested_room_id",
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "requested_room_id", nullable = true,
             foreignKey = @ForeignKey(name = "fk_dorm_applications_requested_room"))
     private Room requestedRoom;
 
