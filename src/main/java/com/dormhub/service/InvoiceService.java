@@ -1,7 +1,6 @@
 package com.dormhub.service;
 
 import com.dormhub.dto.request.InvoiceCreateRequest;
-import com.dormhub.dto.response.InvoiceDetailResponse;
 import com.dormhub.dto.response.InvoicePageResponse;
 import com.dormhub.dto.response.InvoiceResponse;
 import com.dormhub.dto.response.InvoiceSummaryResponse;
@@ -18,6 +17,7 @@ import com.dormhub.entity.enums.ReadingStatus;
 import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
+import com.dormhub.mapper.InvoiceMapper;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.MeterReadingRepository;
@@ -47,15 +47,18 @@ public class InvoiceService {
     private final ContractRepository contractRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final RoomMonthlyChargeCalculator calculator;
+    private final InvoiceMapper invoiceMapper;
 
     public InvoiceService(InvoiceRepository invoiceRepository, RoomRepository roomRepository,
             ContractRepository contractRepository,
-            MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator) {
+            MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
+            InvoiceMapper invoiceMapper) {
         this.invoiceRepository = invoiceRepository;
         this.roomRepository = roomRepository;
         this.contractRepository = contractRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
+        this.invoiceMapper = invoiceMapper;
     }
 
     @Transactional
@@ -107,7 +110,8 @@ public class InvoiceService {
         attachDetail(invoice, electricity);
         attachDetail(invoice, water);
         try {
-            return toResponse(invoiceRepository.saveAndFlush(invoice));
+            Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
         }
@@ -137,7 +141,8 @@ public class InvoiceService {
         invoice.setContract(contract);
         attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
         try {
-            return toResponse(invoiceRepository.saveAndFlush(invoice));
+            Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
         }
@@ -152,7 +157,9 @@ public class InvoiceService {
         Page<Invoice> invoices = month == null
                 ? invoiceRepository.findAll(pageable)
                 : invoiceRepository.findByBillingMonth(parseMonth(month), pageable);
-        List<InvoiceSummaryResponse> content = invoices.getContent().stream().map(this::toSummary).toList();
+        List<InvoiceSummaryResponse> content = invoices.getContent().stream()
+                .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
+                .toList();
         return new InvoicePageResponse(content, page, size, invoices.getTotalElements(), invoices.getTotalPages());
     }
 
@@ -163,7 +170,7 @@ public class InvoiceService {
         }
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Invoice does not exist"));
-        return toResponse(invoice);
+        return invoiceMapper.toResponse(invoice, overdue(invoice));
     }
 
     private InvoiceType parseType(String value) {
@@ -211,34 +218,6 @@ public class InvoiceService {
         } catch (DateTimeParseException exception) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "billingMonth must use YYYY-MM");
         }
-    }
-
-    private InvoiceSummaryResponse toSummary(Invoice invoice) {
-        return new InvoiceSummaryResponse(
-                invoice.getInvoiceId(), invoice.getInvoiceType(), roomId(invoice), contractId(invoice),
-                invoice.getBillingMonth(), invoice.getIssueDate(), invoice.getDueDate(),
-                invoice.getStatus(), overdue(invoice), invoice.getTotalAmount());
-    }
-
-    private InvoiceResponse toResponse(Invoice invoice) {
-        List<InvoiceDetailResponse> details = invoice.getDetails().stream()
-                .map(detail -> new InvoiceDetailResponse(
-                        detail.getDetailId(), detail.getItemType(), detail.getDescription(),
-                        detail.getQuantity(), detail.getUnitPrice(), detail.getAmount()))
-                .toList();
-        return new InvoiceResponse(
-                invoice.getInvoiceId(), invoice.getInvoiceType(), roomId(invoice), contractId(invoice),
-                invoice.getBillingMonth(), invoice.getIssueDate(), invoice.getDueDate(),
-                invoice.getStatus(), overdue(invoice), invoice.getTotalAmount(), details);
-    }
-
-    private Long roomId(Invoice invoice) {
-        return invoice.getRoom() != null ? invoice.getRoom().getId()
-                : invoice.getContract().getRoom().getId();
-    }
-
-    private Long contractId(Invoice invoice) {
-        return invoice.getContract() == null ? null : invoice.getContract().getContractId();
     }
 
     private boolean overdue(Invoice invoice) {
