@@ -27,4 +27,7 @@ public class StudentProfileUpdateRequest {
             message = "URL ảnh đại diện phải bắt đầu bằng http:// hoặc https://"
     )
     private String avatarUrl;
+
+    @Pattern(regexp = "^(0|\\+84)[3|5|7|8|9][0-9]{8}$", message = "Số điện thoại không hợp lệ")
+    private String phone;
 }
