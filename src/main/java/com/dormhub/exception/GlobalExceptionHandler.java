@@ -1,4 +1,3 @@
-
 package com.dormhub.exception;
 
 import com.dormhub.dto.response.ApiResponse;
