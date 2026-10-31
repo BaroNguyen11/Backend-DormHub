@@ -17,7 +17,8 @@ public class StudentProfileResponse {
     private final Gender gender;
     private final String address;
     private final String avatarUrl;
-
+    private final String phone;
+    private final String cic;
     private final String username;
     private final String email;
     private final String fullName;
