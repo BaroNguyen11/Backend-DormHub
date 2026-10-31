@@ -5,9 +5,14 @@ import com.dormhub.entity.enums.InvoiceType;
 import java.time.YearMonth;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
+
+    @Override
+    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
+    Page<Invoice> findAll(Pageable pageable);
 
     boolean existsByRoom_IdAndBillingMonth(Long roomId, YearMonth billingMonth);
 
@@ -15,5 +20,6 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
 
+    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
     Page<Invoice> findByBillingMonth(YearMonth billingMonth, Pageable pageable);
 }
