@@ -1,12 +1,9 @@
-
 package com.dormhub.dto.response;
 
+import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import com.dormhub.entity.enums.MaintenanceType;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
@@ -21,8 +18,16 @@ public class MaintenanceResponse {
     private String title;
     private String description;
     private MaintenanceStatus status;
+    private MaintenancePriority priority;
+    private MaintenanceType type;
+    private String imageUrl;
+    private String rejectionReason;
 
     private Long studentId;
+    private String studentName;
+    private String studentCode;
+    private String studentPhone;
+
     private Long roomId;
 
     private LocalDateTime createdAt;
