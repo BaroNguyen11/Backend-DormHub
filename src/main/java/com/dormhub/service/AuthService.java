@@ -296,7 +296,8 @@ public class AuthService {
         }
 
         // 5. Kiểm tra số lần nhập sai
-        if (verification.getAttempts() >= MAX_OTP_ATTEMPTS) {
+        int attempts = verification.getAttempts() == null ? 0 : verification.getAttempts();
+        if (attempts >= MAX_OTP_ATTEMPTS) {
             throw new AppException(ErrorCode.OTP_MAX_ATTEMPTS);
         }
 
@@ -311,7 +312,7 @@ public class AuthService {
         boolean otpMatches = passwordEncoder.matches(request.getOtp(), verification.getOtpHash());
 
         if (!otpMatches) {
-            verification.setAttempts(verification.getAttempts() + 1);
+            verification.setAttempts(attempts + 1);
             emailVerificationRepository.save(verification);
 
             throw new AppException(ErrorCode.OTP_INVALID);
@@ -398,5 +399,34 @@ public class AuthService {
     @Transactional
     public void logout(String rawRefreshToken) {
         refreshTokenService.revokeRefreshToken(rawRefreshToken);
+    }
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        // 1. Kiểm tra xác nhận mật khẩu mới khớp nhau
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new AppException(ErrorCode.PASSWORD_CONFIRM_NOT_MATCH);
+        }
+
+        // 2. Tìm người dùng
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        // 3. Kiểm tra mật khẩu cũ đúng không
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.OLD_PASSWORD_INCORRECT);
+        }
+
+        // 4. Mật khẩu mới không được trùng mật khẩu cũ
+        if (passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new AppException(ErrorCode.NEW_PASSWORD_SAME_AS_OLD);
+        }
+
+        // 5. Cập nhật mật khẩu mới
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
     }
 }
