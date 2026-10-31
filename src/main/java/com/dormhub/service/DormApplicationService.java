@@ -48,18 +48,10 @@ public class DormApplicationService {
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
 
         validateStudentProfile(student);
-        Room selectedRoom;
-        if (student.getGender() == Gender.OTHER) {
-            if (request.getRoomId() != null) {
-                throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
-            }
-            selectedRoom = null;
-        } else {
-            if (request.getRoomId() == null) {
-                throw new AppException(ErrorCode.DORM_APPLICATION_ROOM_REQUIRED);
-            }
-            selectedRoom = findAvailableRoom(request.getRoomId(), student);
+        if (request.getRoomId() == null) {
+            throw new AppException(ErrorCode.DORM_APPLICATION_ROOM_REQUIRED);
         }
+        Room selectedRoom = findAvailableRoom(request.getRoomId(), student);
 
         if (dormApplicationRepository.existsByStudentIdAndStatusIn(student.getId(), ACTIVE_STATUSES)) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ALREADY_ACTIVE);
@@ -106,10 +98,6 @@ public class DormApplicationService {
         if (application.getStatus() != DormApplicationStatus.PENDING) {
             throw new AppException(ErrorCode.DORM_APPLICATION_NOT_PENDING);
         }
-        if (student.getGender() == Gender.OTHER) {
-            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
-        }
-
         application.setRequestedRoom(findAvailableRoom(roomId, student));
         return dormApplicationMapper.toResponse(dormApplicationRepository.save(application));
     }
@@ -221,6 +209,9 @@ public class DormApplicationService {
                 || !StringUtils.hasText(student.getAddress())) {
             throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
                     "Hồ sơ cần có mã sinh viên, ngày sinh, giới tính và địa chỉ trước khi nộp đơn");
+        }
+        if (student.getGender() == Gender.OTHER) {
+            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
         }
     }
 }

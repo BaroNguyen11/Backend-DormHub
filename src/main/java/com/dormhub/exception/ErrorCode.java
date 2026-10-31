@@ -54,7 +54,7 @@ public enum ErrorCode {
     DORM_APPLICATION_INVALID_REVIEW_STATUS(HttpStatus.BAD_REQUEST, "Trạng thái xử lý chỉ được là APPROVED hoặc REJECTED"),
     DORM_APPLICATION_REJECTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "Cần ghi rõ lý do khi từ chối đơn đăng ký"),
     DORM_APPLICATION_ROOM_REQUIRED(HttpStatus.BAD_REQUEST, "Cần chọn phòng trước khi nộp đơn"),
-    DORM_APPLICATION_GENDER_UNSUPPORTED(HttpStatus.BAD_REQUEST, "Giới tính hiện chưa có chính sách tòa phù hợp để chọn phòng"),
+    DORM_APPLICATION_GENDER_UNSUPPORTED(HttpStatus.BAD_REQUEST, "Chỉ sinh viên có giới tính MALE hoặc FEMALE mới được đăng ký nội trú"),
 
     // OTP
     OTP_INVALID(HttpStatus.BAD_REQUEST, "Mã OTP không chính xác"),
