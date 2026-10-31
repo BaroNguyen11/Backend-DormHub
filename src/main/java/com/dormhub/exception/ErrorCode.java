@@ -1,4 +1,3 @@
-
 package com.dormhub.exception;
 
 import lombok.Getter;
@@ -45,6 +44,11 @@ public enum ErrorCode {
 
     // Database
     DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu xung đột hoặc vi phạm ràng buộc"),
+
+    // Billing
+    BILLING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu hóa đơn"),
+    BILLING_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu Billing xung đột"),
+    DEPOSIT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ tạo hóa đơn DEPOSIT"),
 
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
