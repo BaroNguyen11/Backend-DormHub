@@ -11,6 +11,9 @@ import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
+import com.dormhub.exception.AppException;
+import com.dormhub.exception.ErrorCode;
+import com.dormhub.mapper.DormApplicationMapper;
 import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
@@ -41,28 +44,29 @@ public class DormApplicationService {
     private final RoomRepository roomRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final RoomAssignmentService roomAssignmentService;
+    private final DormApplicationMapper dormApplicationMapper;
 
     @Transactional
     public DormApplicationResponse submit(Long userId, DormApplicationRequest request) {
         Student student = studentRepository.findByUserIdForUpdate(userId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ sinh viên"));
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
 
         validateStudentProfile(student);
         Room selectedRoom;
         if (student.getGender() == Gender.OTHER) {
             if (request.getRoomId() != null) {
-                throw new RuntimeException("Hồ sơ Gender.OTHER chưa có chính sách tòa phù hợp để chọn phòng");
+                throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
             }
             selectedRoom = null;
         } else {
             if (request.getRoomId() == null) {
-                throw new RuntimeException("Cần chọn phòng trước khi nộp đơn");
+                throw new AppException(ErrorCode.DORM_APPLICATION_ROOM_REQUIRED);
             }
             selectedRoom = findAvailableRoom(request.getRoomId(), student);
         }
 
         if (dormApplicationRepository.existsByStudentIdAndStatusIn(student.getId(), ACTIVE_STATUSES)) {
-            throw new RuntimeException("Sinh viên đã có đơn đăng ký đang được xử lý");
+            throw new AppException(ErrorCode.DORM_APPLICATION_ALREADY_ACTIVE);
         }
 
         DormApplication application = new DormApplication();
@@ -71,7 +75,7 @@ public class DormApplicationService {
         application.setStatus(DormApplicationStatus.PENDING);
         application.setNote(normalizeNote(request.getNote()));
 
-        return DormApplicationResponse.from(dormApplicationRepository.save(application));
+        return dormApplicationMapper.toResponse(dormApplicationRepository.save(application));
     }
 
     public Page<DormApplicationResponse> getMyApplications(
@@ -82,14 +86,14 @@ public class DormApplicationService {
         Student student = findStudentByUserId(userId);
 
         return dormApplicationRepository.findAllByStudentId(student.getId(), pageable(page, size))
-                .map(DormApplicationResponse::from);
+                .map(dormApplicationMapper::toResponse);
     }
 
     public DormApplicationResponse getMyApplication(Long userId, Long applicationId) {
         Student student = findStudentByUserId(userId);
         return dormApplicationRepository.findByIdAndStudentId(applicationId, student.getId())
-                .map(DormApplicationResponse::from)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn đăng ký"));
+                .map(dormApplicationMapper::toResponse)
+                .orElseThrow(() -> new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND));
     }
 
     @Transactional
@@ -98,20 +102,20 @@ public class DormApplicationService {
             Long applicationId,
             Long roomId) {
         Student student = studentRepository.findByUserIdForUpdate(userId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ sinh viên"));
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
         DormApplication application = dormApplicationRepository
                 .findByIdAndStudentIdForUpdate(applicationId, student.getId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn đăng ký"));
+                .orElseThrow(() -> new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND));
 
         if (application.getStatus() != DormApplicationStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể đổi phòng đã chọn khi đơn đang chờ duyệt");
+            throw new AppException(ErrorCode.DORM_APPLICATION_NOT_PENDING);
         }
         if (student.getGender() == Gender.OTHER) {
-            throw new RuntimeException("Hồ sơ Gender.OTHER chưa có chính sách tòa phù hợp để chọn phòng");
+            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
         }
 
         application.setRequestedRoom(findAvailableRoom(roomId, student));
-        return DormApplicationResponse.from(dormApplicationRepository.save(application));
+        return dormApplicationMapper.toResponse(dormApplicationRepository.save(application));
     }
 
     @Transactional
@@ -119,14 +123,14 @@ public class DormApplicationService {
         Student student = findStudentByUserId(userId);
         DormApplication application = dormApplicationRepository
                 .findByIdAndStudentIdForUpdate(applicationId, student.getId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn đăng ký"));
+                .orElseThrow(() -> new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND));
 
         if (application.getStatus() != DormApplicationStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể hủy đơn đang chờ duyệt");
+            throw new AppException(ErrorCode.DORM_APPLICATION_NOT_PENDING);
         }
 
         application.setStatus(DormApplicationStatus.CANCELLED);
-        return DormApplicationResponse.from(dormApplicationRepository.save(application));
+        return dormApplicationMapper.toResponse(dormApplicationRepository.save(application));
     }
 
     public Page<DormApplicationResponse> getAll(
@@ -138,11 +142,11 @@ public class DormApplicationService {
         Page<DormApplication> applications = status == null
                 ? dormApplicationRepository.findAll(pageable)
                 : dormApplicationRepository.findAllByStatus(status, pageable);
-        return applications.map(DormApplicationResponse::from);
+        return applications.map(dormApplicationMapper::toResponse);
     }
 
     public DormApplicationResponse getById(Long applicationId) {
-        return DormApplicationResponse.from(findApplication(applicationId));
+        return dormApplicationMapper.toResponse(findApplication(applicationId));
     }
 
     @Transactional
@@ -151,16 +155,16 @@ public class DormApplicationService {
             DormApplicationReviewRequest request) {
         if (request.getStatus() != DormApplicationStatus.APPROVED
                 && request.getStatus() != DormApplicationStatus.REJECTED) {
-            throw new RuntimeException("Trạng thái xử lý chỉ được là APPROVED hoặc REJECTED");
+            throw new AppException(ErrorCode.DORM_APPLICATION_INVALID_REVIEW_STATUS);
         }
         if (request.requiresNote() && !StringUtils.hasText(request.getNote())) {
-            throw new RuntimeException("Cần ghi rõ lý do khi từ chối đơn đăng ký");
+            throw new AppException(ErrorCode.DORM_APPLICATION_REJECTION_NOTE_REQUIRED);
         }
 
         DormApplication application = dormApplicationRepository.findByIdForUpdate(applicationId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn đăng ký"));
+                .orElseThrow(() -> new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND));
         if (application.getStatus() != DormApplicationStatus.PENDING) {
-            throw new RuntimeException("Chỉ có thể xử lý đơn đang chờ duyệt");
+            throw new AppException(ErrorCode.DORM_APPLICATION_NOT_PENDING);
         }
 
         application.setStatus(request.getStatus());
@@ -169,17 +173,17 @@ public class DormApplicationService {
         if (request.getStatus() == DormApplicationStatus.APPROVED) {
             roomAssignmentService.assign(applicationId);
         }
-        return DormApplicationResponse.from(dormApplicationRepository.save(application));
+        return dormApplicationMapper.toResponse(dormApplicationRepository.save(application));
     }
 
     private DormApplication findApplication(Long applicationId) {
         return dormApplicationRepository.findById(applicationId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn đăng ký"));
+                .orElseThrow(() -> new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND));
     }
 
     private Student findStudentByUserId(Long userId) {
         return studentRepository.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ sinh viên"));
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
     }
 
     private Pageable pageable(int page, int size) {
@@ -188,7 +192,8 @@ public class DormApplicationService {
 
     private void validatePage(int page, int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
-            throw new RuntimeException("page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
     }
 
@@ -198,22 +203,22 @@ public class DormApplicationService {
 
     private Room findAvailableRoom(Long roomId, Student student) {
         Room room = roomRepository.findById(roomId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng đã chọn"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         if (room.getStatus() != RoomStatus.ACTIVE) {
-            throw new RuntimeException("Chỉ có thể đăng ký phòng đang hoạt động");
+            throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
         }
         if (room.getBuilding().getGenderPolicy() == null) {
-            throw new RuntimeException("Tòa nhà chưa được phân loại theo giới tính");
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
         }
         BuildingGenderPolicy policy = room.getBuilding().getGenderPolicy();
         if (student.getGender() == Gender.MALE && policy != BuildingGenderPolicy.MALE_ONLY
                 || student.getGender() == Gender.FEMALE && policy != BuildingGenderPolicy.FEMALE_ONLY) {
-            throw new RuntimeException("Phòng đã chọn không phù hợp với chính sách giới tính của tòa");
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
         }
         long occupiedSlots = roomAssignmentRepository.countByRoomIdAndStatus(
                 room.getId(), RoomAssignmentStatus.ASSIGNED);
         if (occupiedSlots >= room.getCapacity()) {
-            throw new RuntimeException("Phòng đã đủ sức chứa");
+            throw new AppException(ErrorCode.ROOM_FULL);
         }
         return room;
     }
@@ -223,7 +228,7 @@ public class DormApplicationService {
                 || student.getDateOfBirth() == null
                 || student.getGender() == null
                 || !StringUtils.hasText(student.getAddress())) {
-            throw new RuntimeException(
+            throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
                     "Hồ sơ cần có mã sinh viên, ngày sinh, giới tính và địa chỉ trước khi nộp đơn");
         }
     }
