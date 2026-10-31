@@ -163,7 +163,7 @@ public class AuthController {
         ResponseCookie clearedAccessCookie = ResponseCookie
                 .from("access_token", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(cookieSecure)
                 .path("/")
                 .maxAge(Duration.ZERO)
                 .sameSite("Lax")
@@ -173,7 +173,7 @@ public class AuthController {
         ResponseCookie clearedRefreshCookie = ResponseCookie
                 .from("refresh_token", "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(cookieSecure)
                 .path("/api/v1/auth")
                 .maxAge(Duration.ZERO)
                 .sameSite("Lax")
@@ -204,9 +204,9 @@ public class AuthController {
         ResponseCookie accessCookie = ResponseCookie
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
-                .secure(cookieSecure) // Dùng cùng cấu hình như login
+                .secure(cookieSecure)
                 .path("/")
-                .maxAge(Duration.ofMinutes(15))
+                .maxAge(Duration.ofMinutes(accessTokenMinutes))
                 .sameSite("Lax")
                 .build();
 
@@ -229,5 +229,15 @@ public class AuthController {
                         )
                 );
     }
+    @PostMapping("/change-password")
+    public ResponseEntity<ApiResponse<Void>> changePassword(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody ChangePasswordRequest request) {
 
+        authService.changePassword(user.getId(), request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Đổi mật khẩu thành công", null)
+        );
+    }
 }

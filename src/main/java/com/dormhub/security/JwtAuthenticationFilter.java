@@ -2,6 +2,7 @@
 package com.dormhub.security;
 
 import com.dormhub.entity.User;
+import com.dormhub.entity.enums.UserStatus;
 import com.dormhub.repository.UserRepository;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -41,7 +42,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String email = jwtService.extractUsername(token);
 
                 userRepository.findByEmail(email).ifPresent(user -> {
-                    if (jwtService.isTokenValid(token, user)) {
+                    if (user.getStatus() == UserStatus.ACTIVE &&jwtService.isTokenValid(token, user)) {
                         authenticateUser(user);
                     }
                 });
