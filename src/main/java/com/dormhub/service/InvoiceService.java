@@ -18,11 +18,11 @@ import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
+import com.dormhub.repository.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
-import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.MeterReadingRepository;
-import com.dormhub.repository.RoomRepository;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -43,19 +43,16 @@ public class InvoiceService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final InvoiceRepository invoiceRepository;
-    private final RoomRepository roomRepository;
-    private final ContractRepository contractRepository;
+    private final InvoiceCreationLockRepository invoiceCreationLockRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final RoomMonthlyChargeCalculator calculator;
     private final InvoiceMapper invoiceMapper;
 
-    public InvoiceService(InvoiceRepository invoiceRepository, RoomRepository roomRepository,
-            ContractRepository contractRepository,
+    public InvoiceService(InvoiceRepository invoiceRepository, InvoiceCreationLockRepository invoiceCreationLockRepository,
             MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
             InvoiceMapper invoiceMapper) {
         this.invoiceRepository = invoiceRepository;
-        this.roomRepository = roomRepository;
-        this.contractRepository = contractRepository;
+        this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
         this.invoiceMapper = invoiceMapper;
@@ -81,8 +78,10 @@ public class InvoiceService {
         if (request.getRoomId() == null || request.getRoomId() <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "A positive roomId is required");
         }
-        Room room = roomRepository.findById(request.getRoomId())
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist"));
+        Room room = invoiceCreationLockRepository.lockRoom(request.getRoomId());
+        if (room == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist");
+        }
         MeterReading reading = meterReadingRepository
                 .findByRoom_IdAndReadingMonth(request.getRoomId(), month);
         if (reading == null) {
@@ -113,7 +112,7 @@ public class InvoiceService {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
+            throw mapIntegrityError(exception);
         }
     }
 
@@ -121,8 +120,10 @@ public class InvoiceService {
         if (request.getContractId() == null || request.getContractId() <= 0 || request.getRoomId() != null) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "ROOM_FEE requires a positive contractId and no roomId");
         }
-        Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist"));
+        Contract contract = invoiceCreationLockRepository.lockContract(request.getContractId());
+        if (contract == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
+        }
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
         if (contract.getStatus() != ContractStatus.ACTIVE
@@ -144,8 +145,20 @@ public class InvoiceService {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
+            throw mapIntegrityError(exception);
         }
+    }
+
+    private RuntimeException mapIntegrityError(DataIntegrityViolationException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return new AppException(ErrorCode.BILLING_CONFLICT,
+                        "Invoice violates a database constraint or already exists");
+            }
+            cause = cause.getCause();
+        }
+        return exception;
     }
 
     @Transactional(readOnly = true)
