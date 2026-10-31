@@ -56,6 +56,12 @@ public enum ErrorCode {
     DORM_APPLICATION_ROOM_REQUIRED(HttpStatus.BAD_REQUEST, "Cần chọn phòng trước khi nộp đơn"),
     DORM_APPLICATION_GENDER_UNSUPPORTED(HttpStatus.BAD_REQUEST, "Giới tính hiện chưa có chính sách tòa phù hợp để chọn phòng"),
 
+    // Room assignment
+    DORM_APPLICATION_NOT_APPROVED(HttpStatus.CONFLICT, "Chỉ có thể phân phòng cho đơn đã được duyệt"),
+    STUDENT_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Sinh viên đã được phân phòng"),
+    DORM_APPLICATION_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Đơn đăng ký đã có phân phòng đang hiệu lực"),
+    ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng"),
+
     // OTP
     OTP_INVALID(HttpStatus.BAD_REQUEST, "Mã OTP không chính xác"),
     OTP_EXPIRED(HttpStatus.BAD_REQUEST, "Mã OTP đã hết hạn"),
