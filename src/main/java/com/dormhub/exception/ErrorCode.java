@@ -41,6 +41,7 @@ public enum ErrorCode {
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
     MAINTENANCE_INVALID_STATUS(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
+    REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do khi từ chối yêu cầu bảo trì"),
 
     // Database
     DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu xung đột hoặc vi phạm ràng buộc"),
