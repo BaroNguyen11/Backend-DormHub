@@ -3,6 +3,9 @@ package com.dormhub.service;
 import com.dormhub.dto.request.BuildingRequest;
 import com.dormhub.dto.response.BuildingResponse;
 import com.dormhub.entity.Building;
+import com.dormhub.exception.AppException;
+import com.dormhub.exception.ErrorCode;
+import com.dormhub.mapper.BuildingMapper;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.BuildingRepository;
@@ -22,42 +25,43 @@ public class BuildingService {
     private final BuildingRepository buildingRepository;
     private final RoomRepository roomRepository;
     private final DormApplicationRepository dormApplicationRepository;
+    private final BuildingMapper buildingMapper;
 
     public List<BuildingResponse> getAll() {
         return buildingRepository.findAll().stream()
-                .map(BuildingResponse::from)
+                .map(buildingMapper::toResponse)
                 .toList();
     }
 
     public BuildingResponse getById(Long id) {
-        return BuildingResponse.from(findBuilding(id));
+        return buildingMapper.toResponse(findBuilding(id));
     }
 
     @Transactional
     public BuildingResponse create(BuildingRequest request) {
         Building building = new Building();
         apply(building, request);
-        return BuildingResponse.from(buildingRepository.save(building));
+        return buildingMapper.toResponse(buildingRepository.save(building));
     }
 
     @Transactional
     public BuildingResponse update(Long id, BuildingRequest request) {
         Building building = buildingRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tòa nhà"));
+                .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
         if (building.getGenderPolicy() != request.getGenderPolicy()
                 && dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
                         id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
-            throw new RuntimeException("Không thể đổi chính sách giới tính khi tòa có đơn đang xử lý");
+            throw new AppException(ErrorCode.BUILDING_GENDER_POLICY_IN_USE);
         }
         apply(building, request);
-        return BuildingResponse.from(buildingRepository.save(building));
+        return buildingMapper.toResponse(buildingRepository.save(building));
     }
 
     @Transactional
     public void delete(Long id) {
         Building building = findBuilding(id);
         if (roomRepository.existsByBuildingId(id)) {
-            throw new RuntimeException("Không thể xóa tòa nhà đang có phòng");
+            throw new AppException(ErrorCode.BUILDING_HAS_ROOMS);
         }
         buildingRepository.delete(building);
     }
@@ -71,6 +75,6 @@ public class BuildingService {
 
     private Building findBuilding(Long id) {
         return buildingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tòa nhà"));
+                .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
     }
 }

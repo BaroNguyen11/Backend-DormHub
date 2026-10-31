@@ -29,6 +29,23 @@ public enum ErrorCode {
 
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
+
+    // Building
+    BUILDING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tòa nhà"),
+    BUILDING_HAS_ROOMS(HttpStatus.CONFLICT, "Không thể xóa tòa nhà đang có phòng"),
+    BUILDING_GENDER_POLICY_IN_USE(HttpStatus.CONFLICT, "Không thể đổi chính sách giới tính khi tòa đang có đơn hoặc phân phòng"),
+
+    // Room
+    ROOM_ALREADY_EXISTS(HttpStatus.CONFLICT, "Số phòng đã tồn tại trong tòa nhà này"),
+    ROOM_CAPACITY_BELOW_OCCUPANCY(HttpStatus.CONFLICT, "Sức chứa mới thấp hơn số sinh viên đang được phân phòng"),
+    ROOM_GENDER_POLICY_REQUIRED(HttpStatus.BAD_REQUEST, "Cần thiết lập chính sách giới tính cho tòa nhà"),
+    ROOM_GENDER_POLICY_MISMATCH(HttpStatus.BAD_REQUEST, "Phòng không phù hợp với chính sách giới tính của tòa"),
+    ROOM_FULL(HttpStatus.CONFLICT, "Phòng đã đủ sức chứa"),
+    ROOM_HAS_ACTIVE_ASSIGNMENTS(HttpStatus.CONFLICT, "Không thể thay đổi phòng đang có sinh viên được phân phòng"),
+    ROOM_HAS_ACTIVE_APPLICATIONS(HttpStatus.CONFLICT, "Không thể thay đổi phòng đang được chọn trong đơn đăng ký"),
+    ROOM_HAS_HISTORY(HttpStatus.CONFLICT, "Không thể xóa phòng đã có lịch sử đơn hoặc phân phòng"),
+    ROOM_NOT_AVAILABLE(HttpStatus.CONFLICT, "Phòng không ở trạng thái có thể đăng ký"),
+
     // OTP
     OTP_INVALID(HttpStatus.BAD_REQUEST, "Mã OTP không chính xác"),
     OTP_EXPIRED(HttpStatus.BAD_REQUEST, "Mã OTP đã hết hạn"),

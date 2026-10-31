@@ -7,6 +7,9 @@ import com.dormhub.entity.Room;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.RoomStatus;
+import com.dormhub.exception.AppException;
+import com.dormhub.exception.ErrorCode;
+import com.dormhub.mapper.RoomMapper;
 import com.dormhub.repository.BuildingRepository;
 import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomRepository;
@@ -32,6 +35,7 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final BuildingRepository buildingRepository;
     private final DormApplicationRepository dormApplicationRepository;
+    private final RoomMapper roomMapper;
 
     public Page<RoomResponse> search(
             Long buildingId,
@@ -44,7 +48,8 @@ public class RoomService {
             int size) {
 
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
-            throw new RuntimeException("page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
 
         Specification<Room> specification = (root, query, criteriaBuilder) -> {
@@ -113,7 +118,7 @@ public class RoomService {
         String roomNumber = request.getRoomNumber().trim();
 
         if (roomRepository.existsByBuildingIdAndRoomNumber(building.getId(), roomNumber)) {
-            throw new RuntimeException("Số phòng đã tồn tại trong tòa nhà này");
+            throw new AppException(ErrorCode.ROOM_ALREADY_EXISTS);
         }
 
         Room room = new Room();
@@ -125,7 +130,7 @@ public class RoomService {
     @Transactional
     public RoomResponse update(Long id, RoomRequest request) {
         Room room = roomRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         Building building = findBuilding(request.getBuildingId());
         requireGenderPolicy(building);
         String roomNumber = request.getRoomNumber().trim();
@@ -133,11 +138,11 @@ public class RoomService {
                 && dormApplicationRepository.existsByRequestedRoomIdAndStatusIn(
                         id, java.util.List.of(
                                 DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED))) {
-            throw new RuntimeException("Không thể chuyển phòng khi có đơn đang chọn phòng này");
+            throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_APPLICATIONS);
         }
         if (roomRepository.existsByBuildingIdAndRoomNumberAndIdNot(
                 building.getId(), roomNumber, id)) {
-            throw new RuntimeException("Số phòng đã tồn tại trong tòa nhà này");
+            throw new AppException(ErrorCode.ROOM_ALREADY_EXISTS);
         }
 
         room.setBuilding(building);
@@ -148,9 +153,9 @@ public class RoomService {
     @Transactional
     public void delete(Long id) {
         Room room = roomRepository.findByIdForUpdate(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         if (dormApplicationRepository.existsByRequestedRoomId(id)) {
-            throw new RuntimeException("Không thể xóa phòng đã được chọn trong đơn đăng ký");
+            throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
         }
         roomRepository.delete(room);
     }
@@ -167,17 +172,17 @@ public class RoomService {
 
     private Room findRoom(Long id) {
         return roomRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy phòng"));
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
     }
 
     private Building findBuilding(Long id) {
         return buildingRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tòa nhà"));
+                .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
     }
 
     private void requireGenderPolicy(Building building) {
         if (building.getGenderPolicy() == null) {
-            throw new RuntimeException("Cần thiết lập genderPolicy cho tòa nhà trước khi quản lý phòng");
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
         }
     }
 
@@ -185,6 +190,6 @@ public class RoomService {
         int availableSlots = room.getStatus() == RoomStatus.ACTIVE
                 ? Math.max(0, room.getCapacity() - (int) assignedCount)
                 : 0;
-        return RoomResponse.from(room, availableSlots);
+        return roomMapper.toResponse(room, availableSlots);
     }
 }
