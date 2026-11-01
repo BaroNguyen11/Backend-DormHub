@@ -18,9 +18,10 @@ import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
-import com.dormhub.repository.InvoiceCreationLockRepository;
+import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.MeterReadingRepository;
+import com.dormhub.repository.RoomRepository;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -43,16 +44,19 @@ public class InvoiceService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final InvoiceRepository invoiceRepository;
-    private final InvoiceCreationLockRepository invoiceCreationLockRepository;
+    private final ContractRepository contractRepository;
+    private final RoomRepository roomRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final RoomMonthlyChargeCalculator calculator;
     private final InvoiceMapper invoiceMapper;
 
-    public InvoiceService(InvoiceRepository invoiceRepository, InvoiceCreationLockRepository invoiceCreationLockRepository,
+    public InvoiceService(InvoiceRepository invoiceRepository, ContractRepository contractRepository,
+            RoomRepository roomRepository,
             MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
             InvoiceMapper invoiceMapper) {
         this.invoiceRepository = invoiceRepository;
-        this.invoiceCreationLockRepository = invoiceCreationLockRepository;
+        this.contractRepository = contractRepository;
+        this.roomRepository = roomRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
         this.invoiceMapper = invoiceMapper;
@@ -78,10 +82,8 @@ public class InvoiceService {
         if (request.getRoomId() == null || request.getRoomId() <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "A positive roomId is required");
         }
-        Room room = invoiceCreationLockRepository.lockRoom(request.getRoomId());
-        if (room == null) {
-            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist");
-        }
+        Room room = roomRepository.findByIdForUpdate(request.getRoomId())
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist"));
         MeterReading reading = meterReadingRepository
                 .findByRoom_IdAndReadingMonth(request.getRoomId(), month);
         if (reading == null) {
@@ -120,10 +122,8 @@ public class InvoiceService {
         if (request.getContractId() == null || request.getContractId() <= 0 || request.getRoomId() != null) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "ROOM_FEE requires a positive contractId and no roomId");
         }
-        Contract contract = invoiceCreationLockRepository.lockContract(request.getContractId());
-        if (contract == null) {
-            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
-        }
+        Contract contract = contractRepository.findByContractIdForUpdate(request.getContractId())
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist"));
         validateRoomFeeContract(contract, month);
         if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "ROOM_FEE invoice already exists for this contract and month");
@@ -136,10 +136,8 @@ public class InvoiceService {
         if (contractId == null || contractId <= 0 || month == null) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "A positive contractId and billing month are required");
         }
-        Contract contract = invoiceCreationLockRepository.lockContract(contractId);
-        if (contract == null) {
-            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
-        }
+        Contract contract = contractRepository.findByContractIdForUpdate(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist"));
         if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contractId, month)) {
             return false;
         }
@@ -263,7 +261,12 @@ public class InvoiceService {
     }
 
     private boolean overdue(Invoice invoice) {
-        return invoice.getDueDate() != null && invoice.getStatus() == InvoiceStatus.UNPAID
-                && invoice.getDueDate().toLocalDate().isBefore(LocalDate.now(BUSINESS_ZONE));
+        if (invoice.getDueDate() == null || invoice.getStatus() != InvoiceStatus.UNPAID) {
+            return false;
+        }
+        if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
+            return invoice.getDueDate().isBefore(LocalDateTime.now(BUSINESS_ZONE));
+        }
+        return invoice.getDueDate().toLocalDate().isBefore(LocalDate.now(BUSINESS_ZONE));
     }
 }
