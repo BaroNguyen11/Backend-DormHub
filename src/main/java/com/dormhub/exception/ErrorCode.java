@@ -57,6 +57,11 @@ public enum ErrorCode {
     DEPOSIT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin đặt cọc không hợp lệ"),
     DEPOSIT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái đặt cọc không cho phép thao tác này"),
 
+    // Contract
+    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
+    CONTRACT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái hợp đồng không cho phép thao tác này"),
+    CONTRACT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin hợp đồng không hợp lệ"),
+
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
 
