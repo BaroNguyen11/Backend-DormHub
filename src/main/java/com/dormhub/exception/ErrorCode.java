@@ -54,6 +54,8 @@ public enum ErrorCode {
     BILLING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu hóa đơn"),
     BILLING_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu Billing xung đột"),
     DEPOSIT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ tạo hóa đơn DEPOSIT"),
+    DEPOSIT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin đặt cọc không hợp lệ"),
+    DEPOSIT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái đặt cọc không cho phép thao tác này"),
 
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
