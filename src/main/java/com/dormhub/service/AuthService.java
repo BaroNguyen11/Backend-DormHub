@@ -19,6 +19,7 @@ import com.dormhub.repository.UserRepository;
 
 import com.dormhub.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Locale;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -330,24 +332,38 @@ public class AuthService {
     @Transactional()
     public LoginResult login(LoginRequest request) {
 
-        String email = request.getEmail()
+        String identifier = request.getEmail()  // The field name stays as 'email' but can contain username
                 .trim()
                 .toLowerCase(Locale.ROOT);
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() ->
-                        new AppException(ErrorCode.INVALID_CREDENTIALS));
+        log.info("Login attempt for identifier: {}", identifier);
+
+        // Try to find user by email first, if not found try username
+        User user = userRepository.findByEmail(identifier)
+                .or(() -> userRepository.findByUsername(identifier))
+                .orElseThrow(() -> {
+                    log.error("User not found for identifier: {}", identifier);
+                    return new AppException(ErrorCode.INVALID_CREDENTIALS);
+                });
+
+        log.info("User found: {}, status: {}", user.getEmail(), user.getStatus());
+        log.info("Password hash from DB (first 30 chars): {}", user.getPasswordHash().substring(0, 30));
+        log.info("Password from request length: {}", request.getPassword().length());
 
         boolean passwordMatches = passwordEncoder.matches(
                 request.getPassword(),
                 user.getPasswordHash()
         );
 
+        log.info("Password matches: {}", passwordMatches);
+
         if (!passwordMatches) {
+            log.error("Password mismatch for user: {}", user.getEmail());
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
+            log.error("User status not active: {}", user.getStatus());
             throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVE);
         }
 

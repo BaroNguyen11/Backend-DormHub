@@ -7,6 +7,7 @@ import com.dormhub.entity.Contract;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.ContractMapper;
@@ -30,13 +31,16 @@ public class ContractService {
     private final RoomRepository roomRepository;
     private final StudentRepository studentRepository;
     private final ContractMapper contractMapper;
+    private final NotificationService notificationService;
 
     public ContractService(ContractRepository contractRepository, RoomRepository roomRepository,
-                           StudentRepository studentRepository, ContractMapper contractMapper) {
+                           StudentRepository studentRepository, ContractMapper contractMapper,
+                           NotificationService notificationService) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
         this.studentRepository = studentRepository;
         this.contractMapper = contractMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -54,7 +58,20 @@ public class ContractService {
         }
 
         Contract contract = contractMapper.toEntity(request, room, student);
-        return contractMapper.toResponse(contractRepository.save(contract));
+        Contract saved = contractRepository.save(contract);
+        
+        // Send notification after contract creation
+        if (student.getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.CONTRACT_CREATED,
+                "Hợp đồng mới",
+                String.format("Hợp đồng #%d đã được tạo thành công", saved.getContractId()),
+                saved.getContractId(),
+                student.getUser().getId()
+            );
+        }
+        
+        return contractMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)

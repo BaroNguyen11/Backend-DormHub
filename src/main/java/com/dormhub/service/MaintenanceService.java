@@ -9,6 +9,7 @@ import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
 import com.dormhub.entity.enums.MaintenanceType;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.MaintenanceMapper;
@@ -34,6 +35,7 @@ public class MaintenanceService {
     private final StudentRepository studentRepository;
     private final RoomRepository roomRepository;
     private final MaintenanceMapper maintenanceMapper;
+    private final NotificationService notificationService;
 
     private Student getStudentByUserId(Long userId) {
         return studentRepository.findByUserId(userId).orElseThrow(() ->
@@ -167,6 +169,19 @@ public class MaintenanceService {
         }
 
         MaintenanceRequest updated = maintenanceRepository.save(maintenance);
+        String messageBody = switch (newStatus) {
+            case IN_PROGRESS -> "Yêu cầu bảo trì \"" + updated.getTitle() + "\" đã được tiếp nhận và đang tiến hành xử lý.";
+            case COMPLETED -> "Yêu cầu bảo trì \"" + updated.getTitle() + "\" đã được hoàn thành.";
+            case REJECTED -> "Yêu cầu bảo trì \"" + updated.getTitle() + "\" đã bị từ chối. Lý do: " + updated.getRejectionReason();
+            default -> "Yêu cầu bảo trì đã đổi trạng thái sang " + newStatus.name();
+        };
+        notificationService.sendNotification(
+                NotificationType.MAINTENANCE_STATUS_CHANGED,
+                "Cập nhật yêu cầu bảo trì #" + updated.getId(),
+                messageBody,
+                updated.getId(),
+                updated.getStudent().getUser().getId()
+        );
         return maintenanceMapper.toResponse(updated);
     }
 }

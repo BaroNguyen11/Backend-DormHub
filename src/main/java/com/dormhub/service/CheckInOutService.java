@@ -5,6 +5,7 @@ import com.dormhub.entity.Contract;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -25,15 +26,18 @@ public class CheckInOutService {
     private final InvoiceRepository invoiceRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final RoomAssignmentMapper roomAssignmentMapper;
+    private final NotificationService notificationService;
 
     public CheckInOutService(ContractRepository contractRepository,
                              InvoiceRepository invoiceRepository,
                              RoomAssignmentRepository roomAssignmentRepository,
-                             RoomAssignmentMapper roomAssignmentMapper) {
+                             RoomAssignmentMapper roomAssignmentMapper,
+                             NotificationService notificationService) {
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
         this.roomAssignmentMapper = roomAssignmentMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -52,6 +56,18 @@ public class CheckInOutService {
 
         assignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         assignment.setCheckInAt(LocalDateTime.now(BUSINESS_ZONE));
+        
+        // Send notification after check-in success
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.GENERAL,
+                "Check-in thành công",
+                String.format("Bạn đã check-in thành công cho hợp đồng #%d", contractId),
+                contractId,
+                contract.getStudent().getUser().getId()
+            );
+        }
+        
         return roomAssignmentMapper.toResponse(assignment);
     }
 
@@ -83,6 +99,18 @@ public class CheckInOutService {
                     ? ContractStatus.EXPIRED
                     : ContractStatus.TERMINATED);
         }
+        
+        // Send notification after check-out success
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.CHECKOUT_CONFIRMED,
+                "Check-out thành công",
+                String.format("Bạn đã check-out thành công cho hợp đồng #%d", contractId),
+                contractId,
+                contract.getStudent().getUser().getId()
+            );
+        }
+        
         return roomAssignmentMapper.toResponse(assignment);
     }
 

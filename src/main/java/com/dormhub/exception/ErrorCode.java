@@ -36,11 +36,19 @@ public enum ErrorCode {
     OTP_MAX_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã nhập sai OTP quá số lần cho phép"),
     OTP_RESEND_TOO_SOON(HttpStatus.TOO_MANY_REQUESTS, "Vui lòng chờ ít nhất 60 giây trước khi yêu cầu OTP mới"),
 
+    // Building errors
+    BUILDING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tòa nhà"),
+    BUILDING_CODE_EXISTS(HttpStatus.CONFLICT, "Mã tòa nhà đã tồn tại"),
+    BUILDING_HAS_ROOMS(HttpStatus.CONFLICT, "Tòa nhà còn phòng, không thể xóa"),
+    
+    // Room errors
+    ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    ROOM_ALREADY_EXISTS(HttpStatus.CONFLICT, "Phòng đã tồn tại trong tòa nhà này"),
+    ROOM_OCCUPIED(HttpStatus.CONFLICT, "Phòng đang có người ở"),
+    
     // Maintenance và Notification
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
-    ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
-    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
     ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng hiện tại của hợp đồng"),
     ROOM_ASSIGNMENT_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái phân phòng không cho phép thao tác này"),
     CONTRACT_HAS_UNPAID_INVOICES(HttpStatus.CONFLICT, "Hợp đồng còn hóa đơn chưa thanh toán"),
