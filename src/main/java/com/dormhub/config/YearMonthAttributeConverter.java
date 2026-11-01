@@ -2,25 +2,26 @@ package com.dormhub.config;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 
 @Converter
-public class YearMonthAttributeConverter implements AttributeConverter<YearMonth, LocalDate> {
+public class YearMonthAttributeConverter implements AttributeConverter<YearMonth, LocalDateTime> {
 
     @Override
-    public LocalDate convertToDatabaseColumn(YearMonth month) {
-        return month == null ? null : month.atDay(1);
+    public LocalDateTime convertToDatabaseColumn(YearMonth month) {
+        return month == null ? null : month.atDay(1).atStartOfDay();
     }
 
     @Override
-    public YearMonth convertToEntityAttribute(LocalDate date) {
-        if (date == null) {
+    public YearMonth convertToEntityAttribute(LocalDateTime dateTime) {
+        if (dateTime == null) {
             return null;
         }
-        if (date.getDayOfMonth() != 1) {
-            throw new IllegalArgumentException("Billing month must be stored as the first day of a month");
+        if (dateTime.getDayOfMonth() != 1 || dateTime.toLocalTime().getNano() != 0
+                || dateTime.toLocalTime().toSecondOfDay() != 0) {
+            throw new IllegalArgumentException("Billing month must be stored at the start of a month");
         }
-        return YearMonth.from(date);
+        return YearMonth.from(dateTime);
     }
 }

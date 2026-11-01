@@ -4,7 +4,6 @@ import com.dormhub.dto.request.RoomRequest;
 import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.Room;
-import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
@@ -17,8 +16,6 @@ import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import jakarta.persistence.criteria.JoinType;
-import jakarta.persistence.criteria.Root;
-import jakarta.persistence.criteria.Subquery;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -30,8 +27,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -99,16 +94,13 @@ public class RoomService {
                                         criteriaBuilder.lower(buildingJoin.get("buildingName")), pattern)));
             }
             if (availableOnly) {
-                Subquery<Long> occupiedSlots = query.subquery(Long.class);
-                Root<RoomAssignment> assignment = occupiedSlots.from(RoomAssignment.class);
-                occupiedSlots.select(criteriaBuilder.count(assignment));
-                occupiedSlots.where(
-                        criteriaBuilder.equal(assignment.get("room").get("id"), root.get("id")),
-                        criteriaBuilder.equal(assignment.get("status"), RoomAssignmentStatus.ASSIGNED));
                 predicates = criteriaBuilder.and(
                         predicates,
-                        criteriaBuilder.equal(root.get("status"), RoomStatus.ACTIVE),
-                        criteriaBuilder.gt(root.<Integer>get("capacity"), occupiedSlots));
+                        criteriaBuilder.equal(root.get("status"), RoomStatus.AVAILABLE),
+                        criteriaBuilder.lt(
+                                criteriaBuilder.sum(root.<Integer>get("currentOccupancy"),
+                                        root.<Integer>get("reservedOccupancy")),
+                                root.<Integer>get("capacity")));
             }
             return predicates;
         };
@@ -123,8 +115,7 @@ public class RoomService {
 
     public RoomResponse getById(Long id) {
         Room room = findRoom(id);
-        return toResponse(room, roomAssignmentRepository.countByRoomIdAndStatus(
-                id, RoomAssignmentStatus.ASSIGNED));
+        return toResponse(room);
     }
 
     @Transactional
@@ -139,8 +130,10 @@ public class RoomService {
 
         Room room = new Room();
         room.setBuilding(building);
+        room.setCurrentOccupancy(0);
+        room.setReservedOccupancy(0);
         apply(room, request, roomNumber);
-        return toResponse(roomRepository.save(room), 0);
+        return toResponse(roomRepository.save(room));
     }
 
     @Transactional
@@ -150,13 +143,24 @@ public class RoomService {
         Building building = findBuilding(request.getBuildingId());
         requireGenderPolicy(building);
         String roomNumber = request.getRoomNumber().trim();
-        long assignedCount = roomAssignmentRepository.countByRoomIdAndStatus(
-                id, RoomAssignmentStatus.ASSIGNED);
+        int currentOccupancy = room.getCurrentOccupancy();
+        int totalOccupiedOrReserved = currentOccupancy + room.getReservedOccupancy();
 
-        if (request.getCapacity() < assignedCount) {
+        if (request.getCapacity() < totalOccupiedOrReserved) {
             throw new AppException(ErrorCode.ROOM_CAPACITY_BELOW_OCCUPANCY);
         }
-        if (!room.getBuilding().getId().equals(building.getId()) && assignedCount > 0) {
+        if (request.getStatus() == RoomStatus.AVAILABLE
+                && request.getCapacity() <= totalOccupiedOrReserved) {
+            throw new AppException(ErrorCode.ROOM_FULL);
+        }
+        if (room.getReservedOccupancy() > 0
+                && (request.getStatus() == RoomStatus.MAINTENANCE
+                || request.getStatus() == RoomStatus.INACTIVE)) {
+            throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_CONTRACTS);
+        }
+        if (!room.getBuilding().getId().equals(building.getId())
+                && (totalOccupiedOrReserved > 0 || roomAssignmentRepository.existsByRoomIdAndStatus(
+                        id, RoomAssignmentStatus.ASSIGNED))) {
             throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_ASSIGNMENTS);
         }
         if (!room.getBuilding().getId().equals(building.getId())
@@ -172,7 +176,7 @@ public class RoomService {
 
         room.setBuilding(building);
         apply(room, request, roomNumber);
-        return toResponse(roomRepository.save(room), assignedCount);
+        return toResponse(roomRepository.save(room));
     }
 
     @Transactional
@@ -213,21 +217,12 @@ public class RoomService {
     }
 
     private Page<RoomResponse> withAvailableSlots(Page<Room> rooms) {
-        List<Long> roomIds = rooms.getContent().stream().map(Room::getId).toList();
-        Map<Long, Long> assignedCounts = roomIds.isEmpty()
-                ? Map.of()
-                : roomAssignmentRepository.countByRoomIdsAndStatus(roomIds, RoomAssignmentStatus.ASSIGNED)
-                        .stream()
-                        .collect(Collectors.toMap(
-                                row -> ((Number) row[0]).longValue(),
-                                row -> ((Number) row[1]).longValue()));
-
-        return rooms.map(room -> toResponse(room, assignedCounts.getOrDefault(room.getId(), 0L)));
+        return rooms.map(this::toResponse);
     }
 
-    private RoomResponse toResponse(Room room, long assignedCount) {
-        int availableSlots = room.getStatus() == RoomStatus.ACTIVE
-                ? Math.max(0, room.getCapacity() - (int) assignedCount)
+    private RoomResponse toResponse(Room room) {
+        int availableSlots = room.getStatus() == RoomStatus.AVAILABLE
+                ? Math.max(0, room.getCapacity() - room.getCurrentOccupancy() - room.getReservedOccupancy())
                 : 0;
         return roomMapper.toResponse(room, availableSlots);
     }

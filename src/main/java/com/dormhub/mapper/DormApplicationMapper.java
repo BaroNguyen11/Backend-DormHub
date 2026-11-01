@@ -2,13 +2,18 @@ package com.dormhub.mapper;
 
 import com.dormhub.dto.response.DormApplicationResponse;
 import com.dormhub.entity.DormApplication;
+import com.dormhub.entity.Contract;
+import com.dormhub.entity.Invoice;
 import com.dormhub.entity.Room;
 import org.springframework.stereotype.Component;
 
 @Component
 public class DormApplicationMapper {
 
-    public DormApplicationResponse toResponse(DormApplication application) {
+    public DormApplicationResponse toResponse(
+            DormApplication application,
+            Contract contract,
+            Invoice depositInvoice) {
         Room room = application.getRequestedRoom();
         return new DormApplicationResponse(
                 application.getId(),
@@ -26,6 +31,11 @@ public class DormApplicationMapper {
                 application.getReviewNote(),
                 application.getProcessedAt(),
                 application.getCreatedAt(),
-                application.getUpdatedAt());
+                application.getUpdatedAt(),
+                contract == null ? null : contract.getContractId(),
+                depositInvoice == null ? null : depositInvoice.getInvoiceId(),
+                contract == null ? null : contract.getStartDate(),
+                contract == null ? null : contract.getEndDate(),
+                contract == null ? null : contract.getDepositAmount());
     }
 }

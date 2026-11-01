@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -40,6 +42,12 @@ public class Room {
     @Column(nullable = false)
     private Integer capacity;
 
+    @Column(name = "current_occupancy", nullable = false)
+    private Integer currentOccupancy = 0;
+
+    @Column(name = "reserved_occupancy", nullable = false)
+    private Integer reservedOccupancy = 0;
+
     @Column(name = "room_type", nullable = false, length = 50)
     private String roomType;
 
@@ -47,8 +55,9 @@ public class Room {
     private BigDecimal price;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private RoomStatus status = RoomStatus.ACTIVE;
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "room_status")
+    private RoomStatus status = RoomStatus.AVAILABLE;
 
     @Column(columnDefinition = "text")
     private String description;

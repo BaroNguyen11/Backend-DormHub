@@ -2,7 +2,10 @@ package com.dormhub.repository;
 
 import com.dormhub.entity.Invoice;
 import com.dormhub.entity.enums.InvoiceType;
+import com.dormhub.entity.Invoice;
 import java.time.YearMonth;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,7 +16,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByContract_ContractIdAndBillingMonth(Long contractId, YearMonth billingMonth);
 
-    boolean existsByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
+    java.util.Optional<Invoice> findByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
+
+    List<Invoice> findAllByContract_ContractIdInAndInvoiceType(
+            Collection<Long> contractIds, InvoiceType invoiceType);
 
     Page<Invoice> findByBillingMonth(YearMonth billingMonth, Pageable pageable);
 }

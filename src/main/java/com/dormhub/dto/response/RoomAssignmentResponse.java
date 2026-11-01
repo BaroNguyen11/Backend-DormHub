@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public record RoomAssignmentResponse(
         Long id,
         Long dormApplicationId,
+        Long contractId,
         Long studentId,
         String studentCode,
         String studentName,

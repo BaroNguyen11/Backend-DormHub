@@ -1,8 +1,9 @@
 package com.dormhub.entity.enums;
 
-/** Operational state only; occupancy and availability are derived from assignments. */
+/** Room lifecycle and availability states persisted by the PostgreSQL room_status enum. */
 public enum RoomStatus {
-    ACTIVE,
+    AVAILABLE,
+    FULL,
     MAINTENANCE,
     INACTIVE
 }

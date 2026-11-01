@@ -16,6 +16,8 @@ public class RoomMapper {
                 room.getRoomNumber(),
                 room.getFloor(),
                 room.getCapacity(),
+                room.getCurrentOccupancy(),
+                room.getReservedOccupancy(),
                 availableSlots,
                 room.getRoomType(),
                 room.getPrice(),

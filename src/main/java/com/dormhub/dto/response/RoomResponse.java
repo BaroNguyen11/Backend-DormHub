@@ -13,6 +13,8 @@ public record RoomResponse(
         String roomNumber,
         Integer floor,
         Integer capacity,
+        Integer currentOccupancy,
+        Integer reservedOccupancy,
         Integer availableSlots,
         String roomType,
         BigDecimal price,

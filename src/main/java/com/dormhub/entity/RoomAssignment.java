@@ -32,6 +32,11 @@ public class RoomAssignment {
             foreignKey = @ForeignKey(name = "fk_room_assignments_room"))
     private Room room;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contract_id",
+            foreignKey = @ForeignKey(name = "fk_room_assignments_contract"))
+    private Contract contract;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private RoomAssignmentStatus status = RoomAssignmentStatus.ASSIGNED;

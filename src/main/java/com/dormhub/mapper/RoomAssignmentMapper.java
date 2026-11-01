@@ -11,6 +11,7 @@ public class RoomAssignmentMapper {
         return new RoomAssignmentResponse(
                 assignment.getId(),
                 assignment.getDormApplication().getId(),
+                assignment.getContract() == null ? null : assignment.getContract().getContractId(),
                 assignment.getDormApplication().getStudent().getId(),
                 assignment.getDormApplication().getStudent().getStudentCode(),
                 assignment.getDormApplication().getStudent().getUser().getFullName(),

@@ -69,7 +69,7 @@ public class InvoiceService {
         InvoiceType type = parseType(request.getInvoiceType());
         if (type == InvoiceType.DEPOSIT) {
             throw new AppException(ErrorCode.DEPOSIT_NOT_SUPPORTED,
-                    "DEPOSIT invoice creation is not supported in this phase");
+                    "Hóa đơn cọc được tạo tự động khi đơn đăng ký được duyệt");
         }
         YearMonth month = parseMonth(request.getBillingMonth());
         if (type == InvoiceType.ROOM_FEE) {
@@ -126,8 +126,8 @@ public class InvoiceService {
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
         if (contract.getStatus() != ContractStatus.ACTIVE
-                || contract.getStartDate().toLocalDate().isAfter(last)
-                || contract.getEndDate().toLocalDate().isBefore(first)) {
+                || contract.getStartDate().isAfter(last)
+                || contract.getEndDate().isBefore(first)) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Contract is not active in the billing month");
         }
         if (contract.getMonthlyRent() == null || contract.getMonthlyRent().signum() < 0) {
@@ -138,6 +138,7 @@ public class InvoiceService {
         }
         BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
         Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, month, rent);
+        invoice.setRoom(contract.getRoom());
         invoice.setContract(contract);
         attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
         try {
@@ -146,6 +147,31 @@ public class InvoiceService {
         } catch (DataIntegrityViolationException exception) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
         }
+    }
+
+    @Transactional
+    public Invoice createDepositInvoice(Contract contract) {
+        if (contract.getContractId() == null || contract.getStatus() != ContractStatus.PENDING
+                || contract.getRoom() == null
+                || contract.getDepositAmount() == null || contract.getDepositAmount().signum() <= 0) {
+            throw new AppException(ErrorCode.CONTRACT_RENT_INVALID);
+        }
+        return invoiceRepository.findByContract_ContractIdAndInvoiceType(
+                        contract.getContractId(), InvoiceType.DEPOSIT)
+                .orElseGet(() -> {
+                    LocalDate issueDate = LocalDate.now(BUSINESS_ZONE);
+                    Invoice invoice = new Invoice();
+                    invoice.setInvoiceType(InvoiceType.DEPOSIT);
+                    invoice.setRoom(contract.getRoom());
+                    invoice.setContract(contract);
+                    invoice.setBillingMonth(YearMonth.from(issueDate));
+                    invoice.setIssueDate(issueDate);
+                    invoice.setDueDate(issueDate.plusDays(14));
+                    invoice.setStatus(InvoiceStatus.PENDING);
+                    invoice.setTotalAmount(contract.getDepositAmount());
+                    invoice.setNote("Tiền cọc hợp đồng " + contract.getContractId());
+                    return invoiceRepository.saveAndFlush(invoice);
+                });
     }
 
     @Transactional(readOnly = true)
@@ -186,9 +212,9 @@ public class InvoiceService {
         Invoice invoice = new Invoice();
         invoice.setInvoiceType(type);
         invoice.setBillingMonth(month);
-        invoice.setIssueDate(issueDate);
-        invoice.setDueDate(issueDate.plusDays(14));
-        invoice.setStatus(InvoiceStatus.UNPAID);
+        invoice.setIssueDate(issueDate.toLocalDate());
+        invoice.setDueDate(issueDate.plusDays(14).toLocalDate());
+        invoice.setStatus(InvoiceStatus.PENDING);
         invoice.setTotalAmount(totalAmount);
         return invoice;
     }
@@ -221,7 +247,7 @@ public class InvoiceService {
     }
 
     private boolean overdue(Invoice invoice) {
-        return invoice.getDueDate() != null && invoice.getStatus() == InvoiceStatus.UNPAID
-                && invoice.getDueDate().toLocalDate().isBefore(LocalDate.now(BUSINESS_ZONE));
+        return invoice.getDueDate() != null && invoice.getStatus() == InvoiceStatus.PENDING
+                && invoice.getDueDate().isBefore(LocalDate.now(BUSINESS_ZONE));
     }
 }

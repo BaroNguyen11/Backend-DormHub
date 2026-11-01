@@ -44,8 +44,17 @@ public enum ErrorCode {
     ROOM_FULL(HttpStatus.CONFLICT, "Phòng đã đủ sức chứa"),
     ROOM_HAS_ACTIVE_ASSIGNMENTS(HttpStatus.CONFLICT, "Không thể thay đổi phòng đang có sinh viên được phân phòng"),
     ROOM_HAS_ACTIVE_APPLICATIONS(HttpStatus.CONFLICT, "Không thể thay đổi phòng đang được chọn trong đơn đăng ký"),
+    ROOM_HAS_ACTIVE_CONTRACTS(HttpStatus.CONFLICT, "Không thể bảo trì hoặc ngừng phòng đang được giữ cho hợp đồng chờ cọc"),
     ROOM_HAS_HISTORY(HttpStatus.CONFLICT, "Không thể xóa phòng đã có lịch sử đơn hoặc phân phòng"),
     ROOM_NOT_AVAILABLE(HttpStatus.CONFLICT, "Phòng không ở trạng thái có thể đăng ký"),
+
+    // Contract and deposit workflow
+    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
+    CONTRACT_ALREADY_EXISTS(HttpStatus.CONFLICT, "Đơn đăng ký đã có hợp đồng"),
+    CONTRACT_NOT_PENDING(HttpStatus.CONFLICT, "Hợp đồng không ở trạng thái chờ xử lý"),
+    CONTRACT_NOT_ACTIVE(HttpStatus.CONFLICT, "Chỉ hợp đồng đang hiệu lực mới được phân phòng"),
+    CONTRACT_DEPOSIT_NOT_PAID(HttpStatus.CONFLICT, "Hóa đơn cọc chưa được thanh toán"),
+    CONTRACT_RENT_INVALID(HttpStatus.BAD_REQUEST, "Giá phòng chưa hợp lệ để tạo hợp đồng"),
 
     // Dorm application
     DORM_APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đơn đăng ký"),
@@ -81,7 +90,7 @@ public enum ErrorCode {
     // Billing
     BILLING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu hóa đơn"),
     BILLING_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu Billing xung đột"),
-    DEPOSIT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ tạo hóa đơn DEPOSIT"),
+    DEPOSIT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "Hóa đơn cọc chỉ được tạo tự động trong luồng hợp đồng"),
 
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
