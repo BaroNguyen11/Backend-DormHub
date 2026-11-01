@@ -15,6 +15,8 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import com.dormhub.entity.enums.DepositStatus;
+import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
@@ -56,6 +58,10 @@ public class Contract {
 
     @Column(name = "deposit_amount", precision = 38, scale = 0)
     private BigDecimal depositAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "deposit_status", nullable = false, length = 16)
+    private DepositStatus depositStatus = DepositStatus.UNPAID;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)

@@ -40,7 +40,12 @@ public enum ErrorCode {
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
+    ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng hiện tại của hợp đồng"),
+    ROOM_ASSIGNMENT_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái phân phòng không cho phép thao tác này"),
+    CONTRACT_HAS_UNPAID_INVOICES(HttpStatus.CONFLICT, "Hợp đồng còn hóa đơn chưa thanh toán"),
     MAINTENANCE_INVALID_STATUS(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
+    REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do khi từ chối yêu cầu bảo trì"),
 
     // Database
     DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu xung đột hoặc vi phạm ràng buộc"),
@@ -49,6 +54,8 @@ public enum ErrorCode {
     BILLING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu hóa đơn"),
     BILLING_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu Billing xung đột"),
     DEPOSIT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ tạo hóa đơn DEPOSIT"),
+    DEPOSIT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin đặt cọc không hợp lệ"),
+    DEPOSIT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái đặt cọc không cho phép thao tác này"),
 
     // Contract
     CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
