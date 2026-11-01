@@ -26,6 +26,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
 
+    Optional<Invoice> findByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
+
     boolean existsByContract_ContractIdAndStatus(Long contractId, InvoiceStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
