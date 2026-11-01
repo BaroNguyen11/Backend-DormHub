@@ -45,11 +45,11 @@ public class DepositService {
 
     private DepositFlowResponse createDepositInvoice(Long contractId, boolean returnExisting) {
         if (contractId == null || contractId <= 0) {
-            throw new AppException(ErrorCode.DEPOSIT_INVALID, "contractId phải là số dương");
+            throw new AppException(ErrorCode.INVALID_REQUEST, "ID hợp đồng không hợp lệ. ID phải là số nguyên dương.");
         }
 
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hợp đồng"));
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND, "Không tìm thấy hợp đồng"));
         if (returnExisting) {
             var existing = invoiceRepository.findByContract_ContractIdAndInvoiceType(contractId, InvoiceType.DEPOSIT);
             if (existing.isPresent()) {
@@ -106,7 +106,7 @@ public class DepositService {
     @Transactional
     public DepositFlowResponse confirmDepositPaid(Long invoiceId) {
         if (invoiceId == null || invoiceId <= 0) {
-            throw new AppException(ErrorCode.DEPOSIT_INVALID, "invoiceId phải là số dương");
+            throw new AppException(ErrorCode.INVALID_REQUEST, "ID hóa đơn không hợp lệ. ID phải là số nguyên dương.");
         }
 
         Invoice candidate = invoiceRepository.findById(invoiceId)
@@ -119,7 +119,7 @@ public class DepositService {
 
         Long contractId = candidate.getContract().getContractId();
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hợp đồng"));
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND, "Không tìm thấy hợp đồng"));
         Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
                 .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND,
                         "Không tìm thấy hóa đơn đặt cọc"));
