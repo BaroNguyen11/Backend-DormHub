@@ -9,6 +9,7 @@ import com.dormhub.entity.enums.DepositStatus;
 import com.dormhub.entity.enums.InvoiceItemType;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.repository.InvoiceCreationLockRepository;
@@ -26,11 +27,14 @@ public class DepositService {
 
     private final InvoiceRepository invoiceRepository;
     private final InvoiceCreationLockRepository invoiceCreationLockRepository;
+    private final NotificationService notificationService;
 
     public DepositService(InvoiceRepository invoiceRepository,
-                          InvoiceCreationLockRepository invoiceCreationLockRepository) {
+                          InvoiceCreationLockRepository invoiceCreationLockRepository,
+                          NotificationService notificationService) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -133,6 +137,18 @@ public class DepositService {
         invoice.setStatus(InvoiceStatus.PAID);
         contract.setStatus(ContractStatus.ACTIVE);
         contract.setDepositStatus(DepositStatus.HELD);
+        
+        // Send notification after deposit payment success and contract activation
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.PAYMENT_SUCCESS,
+                "Thanh toán thành công",
+                "Thanh toán tiền cọc thành công. Hợp đồng đã được kích hoạt",
+                invoice.getInvoiceId(),
+                contract.getStudent().getUser().getId()
+            );
+        }
+        
         return toResponse(contract, invoice);
     }
 

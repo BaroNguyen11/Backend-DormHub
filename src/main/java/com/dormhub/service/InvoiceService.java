@@ -10,6 +10,7 @@ import com.dormhub.entity.InvoiceDetail;
 import com.dormhub.entity.enums.InvoiceItemType;
 import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.MeterReading;
@@ -18,6 +19,7 @@ import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
+import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.MeterReadingRepository;
@@ -27,16 +29,20 @@ import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class InvoiceService {
 
@@ -47,15 +53,19 @@ public class InvoiceService {
     private final MeterReadingRepository meterReadingRepository;
     private final RoomMonthlyChargeCalculator calculator;
     private final InvoiceMapper invoiceMapper;
+    private final NotificationService notificationService;
+    private final ContractRepository contractRepository;
 
     public InvoiceService(InvoiceRepository invoiceRepository, InvoiceCreationLockRepository invoiceCreationLockRepository,
             MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
-            InvoiceMapper invoiceMapper) {
+            InvoiceMapper invoiceMapper, NotificationService notificationService, ContractRepository contractRepository) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
         this.invoiceMapper = invoiceMapper;
+        this.notificationService = notificationService;
+        this.contractRepository = contractRepository;
     }
 
     @Transactional
@@ -106,10 +116,43 @@ public class InvoiceService {
 
         Invoice invoice = newMonthlyInvoice(InvoiceType.UTILITY, month, total);
         invoice.setRoom(room);
+
+        // Query active contract for this room in the billing month
+        String billingMonthStr = month.toString(); // "2026-11"
+        Optional<Contract> activeContract = contractRepository
+            .findActiveContractByRoomAndMonth(room.getId(), billingMonthStr);
+
+        if (activeContract.isPresent()) {
+            invoice.setContract(activeContract.get());
+        } else {
+            // Log warning but allow invoice creation without contract
+            // (Room might have previous unpaid invoices even if no current contract)
+            log.warn("No active contract found for room {} in month {}, creating invoice without contract link", 
+                     room.getId(), billingMonthStr);
+        }
+
         attachDetail(invoice, electricity);
         attachDetail(invoice, water);
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            
+            // Send notification after invoice creation
+            if (saved.getContract() != null 
+                && saved.getContract().getStudent() != null 
+                && saved.getContract().getStudent().getUser() != null) {
+                String dueDate = saved.getDueDate() != null 
+                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "N/A";
+                notificationService.sendNotification(
+                    NotificationType.INVOICE_CREATED,
+                    "Hóa đơn mới",
+                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
+                        saved.getInvoiceType().name(), dueDate),
+                    saved.getInvoiceId(),
+                    saved.getContract().getStudent().getUser().getId()
+                );
+            }
+            
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw mapIntegrityError(exception);
@@ -172,6 +215,24 @@ public class InvoiceService {
         attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            
+            // Send notification after ROOM_FEE invoice creation
+            if (saved.getContract() != null 
+                && saved.getContract().getStudent() != null 
+                && saved.getContract().getStudent().getUser() != null) {
+                String dueDate = saved.getDueDate() != null 
+                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "N/A";
+                notificationService.sendNotification(
+                    NotificationType.INVOICE_CREATED,
+                    "Hóa đơn mới",
+                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
+                        saved.getInvoiceType().name(), dueDate),
+                    saved.getInvoiceId(),
+                    saved.getContract().getStudent().getUser().getId()
+                );
+            }
+            
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw mapIntegrityError(exception);

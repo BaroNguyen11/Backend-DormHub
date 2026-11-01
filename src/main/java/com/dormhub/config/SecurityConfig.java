@@ -85,6 +85,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/test-password").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/generate-hash").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").denyAll()
                         .requestMatchers(HttpMethod.POST,
                                         "/api/v1/auth/login",
@@ -95,6 +97,7 @@ public class SecurityConfig {
                                         "/api/v1/auth/logout",
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
+                        .requestMatchers("/api/v1/notifications/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
