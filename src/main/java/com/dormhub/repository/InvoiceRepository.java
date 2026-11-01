@@ -1,6 +1,7 @@
 package com.dormhub.repository;
 
 import com.dormhub.entity.Invoice;
+import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
 import jakarta.persistence.LockModeType;
 import java.time.YearMonth;
@@ -24,6 +25,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     boolean existsByContract_ContractIdAndBillingMonth(Long contractId, YearMonth billingMonth);
 
     boolean existsByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
+
+    boolean existsByContract_ContractIdAndStatus(Long contractId, InvoiceStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select invoice from Invoice invoice where invoice.invoiceId = :invoiceId")

@@ -40,6 +40,10 @@ public enum ErrorCode {
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
+    ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng hiện tại của hợp đồng"),
+    ROOM_ASSIGNMENT_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái phân phòng không cho phép thao tác này"),
+    CONTRACT_HAS_UNPAID_INVOICES(HttpStatus.CONFLICT, "Hợp đồng còn hóa đơn chưa thanh toán"),
     MAINTENANCE_INVALID_STATUS(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
     REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do khi từ chối yêu cầu bảo trì"),
 
