@@ -1,6 +1,7 @@
 package com.dormhub.entity;
 
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DepositStatus;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,6 +35,10 @@ public class Contract {
 
     @Column(name = "deposit_amount", precision = 38, scale = 0)
     private BigDecimal depositAmount;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "deposit_status", nullable = false, length = 16)
+    private DepositStatus depositStatus = DepositStatus.UNPAID;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
