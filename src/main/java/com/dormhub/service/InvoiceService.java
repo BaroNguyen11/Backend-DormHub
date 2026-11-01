@@ -124,6 +124,35 @@ public class InvoiceService {
         if (contract == null) {
             throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
         }
+        validateRoomFeeContract(contract, month);
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "ROOM_FEE invoice already exists for this contract and month");
+        }
+        return saveRoomFeeInvoice(contract, month);
+    }
+
+    @Transactional
+    public boolean createRoomFeeIfAbsent(Long contractId, YearMonth month) {
+        if (contractId == null || contractId <= 0 || month == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "A positive contractId and billing month are required");
+        }
+        Contract contract = invoiceCreationLockRepository.lockContract(contractId);
+        if (contract == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
+        }
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contractId, month)) {
+            return false;
+        }
+        if (YearMonth.from(contract.getStartDate()).equals(month)) {
+            throw new AppException(ErrorCode.BILLING_CONFLICT,
+                    "First-month ROOM_FEE must be created by Contract/Billing integration");
+        }
+        validateRoomFeeContract(contract, month);
+        saveRoomFeeInvoice(contract, month);
+        return true;
+    }
+
+    private void validateRoomFeeContract(Contract contract, YearMonth month) {
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
         if (contract.getStatus() != ContractStatus.ACTIVE
@@ -134,9 +163,9 @@ public class InvoiceService {
         if (contract.getMonthlyRent() == null || contract.getMonthlyRent().signum() < 0) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Contract monthly rent is invalid");
         }
-        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "ROOM_FEE invoice already exists for this contract and month");
-        }
+    }
+
+    private InvoiceResponse saveRoomFeeInvoice(Contract contract, YearMonth month) {
         BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
         Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, month, rent);
         invoice.setContract(contract);
