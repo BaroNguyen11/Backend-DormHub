@@ -6,7 +6,6 @@ import com.dormhub.dto.response.DormApplicationResponse;
 import com.dormhub.entity.DormApplication;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.Student;
-import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.RoomStatus;
@@ -185,18 +184,20 @@ public class DormApplicationService {
     private Room findAvailableRoom(Long roomId, Student student) {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        if (room.getStatus() != RoomStatus.ACTIVE) {
+        if (room.getStatus() != RoomStatus.AVAILABLE) {
             throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
         }
-        if (room.getBuilding().getGenderPolicy() == null) {
+        if (room.getBuilding().getGenderRestriction() == null) {
             throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
         }
-        BuildingGenderPolicy policy = room.getBuilding().getGenderPolicy();
-        if (student.getGender() == Gender.MALE && policy != BuildingGenderPolicy.MALE_ONLY
-                || student.getGender() == Gender.FEMALE && policy != BuildingGenderPolicy.FEMALE_ONLY) {
+        Gender restriction = room.getBuilding().getGenderRestriction();
+        if (student.getGender() != Gender.MALE && student.getGender() != Gender.FEMALE) {
+            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
+        }
+        if (student.getGender() != restriction) {
             throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
         }
-        if (room.getCapacity() < 1) {
+        if (room.getCapacity() <= room.getCurrentOccupancy()) {
             throw new AppException(ErrorCode.ROOM_FULL);
         }
         return room;

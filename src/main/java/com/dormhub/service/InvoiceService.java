@@ -10,6 +10,7 @@ import com.dormhub.entity.InvoiceDetail;
 import com.dormhub.entity.enums.InvoiceItemType;
 import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.MeterReading;
@@ -18,47 +19,53 @@ import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
-import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.InvoiceCreationLockRepository;
+import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.MeterReadingRepository;
-import com.dormhub.repository.RoomRepository;
 import java.math.BigDecimal;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class InvoiceService {
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final InvoiceRepository invoiceRepository;
-    private final RoomRepository roomRepository;
-    private final ContractRepository contractRepository;
+    private final InvoiceCreationLockRepository invoiceCreationLockRepository;
     private final MeterReadingRepository meterReadingRepository;
     private final RoomMonthlyChargeCalculator calculator;
     private final InvoiceMapper invoiceMapper;
+    private final NotificationService notificationService;
+    private final ContractRepository contractRepository;
 
-    public InvoiceService(InvoiceRepository invoiceRepository, RoomRepository roomRepository,
-            ContractRepository contractRepository,
+    public InvoiceService(InvoiceRepository invoiceRepository, InvoiceCreationLockRepository invoiceCreationLockRepository,
             MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
-            InvoiceMapper invoiceMapper) {
+            InvoiceMapper invoiceMapper, NotificationService notificationService, ContractRepository contractRepository) {
         this.invoiceRepository = invoiceRepository;
-        this.roomRepository = roomRepository;
-        this.contractRepository = contractRepository;
+        this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
         this.invoiceMapper = invoiceMapper;
+        this.notificationService = notificationService;
+        this.contractRepository = contractRepository;
     }
 
     @Transactional
@@ -81,8 +88,10 @@ public class InvoiceService {
         if (request.getRoomId() == null || request.getRoomId() <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "A positive roomId is required");
         }
-        Room room = roomRepository.findById(request.getRoomId())
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist"));
+        Room room = invoiceCreationLockRepository.lockRoom(request.getRoomId());
+        if (room == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist");
+        }
         MeterReading reading = meterReadingRepository
                 .findByRoom_IdAndReadingMonth(request.getRoomId(), month);
         if (reading == null) {
@@ -107,13 +116,46 @@ public class InvoiceService {
 
         Invoice invoice = newMonthlyInvoice(InvoiceType.UTILITY, month, total);
         invoice.setRoom(room);
+
+        // Query active contract for this room in the billing month
+        String billingMonthStr = month.toString(); // "2026-11"
+        Optional<Contract> activeContract = contractRepository
+            .findActiveContractByRoomAndMonth(room.getId(), billingMonthStr);
+
+        if (activeContract.isPresent()) {
+            invoice.setContract(activeContract.get());
+        } else {
+            // Log warning but allow invoice creation without contract
+            // (Room might have previous unpaid invoices even if no current contract)
+            log.warn("No active contract found for room {} in month {}, creating invoice without contract link", 
+                     room.getId(), billingMonthStr);
+        }
+
         attachDetail(invoice, electricity);
         attachDetail(invoice, water);
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            
+            // Send notification after invoice creation
+            if (saved.getContract() != null 
+                && saved.getContract().getStudent() != null 
+                && saved.getContract().getStudent().getUser() != null) {
+                String dueDate = saved.getDueDate() != null 
+                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "N/A";
+                notificationService.sendNotification(
+                    NotificationType.INVOICE_CREATED,
+                    "Hóa đơn mới",
+                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
+                        saved.getInvoiceType().name(), dueDate),
+                    saved.getInvoiceId(),
+                    saved.getContract().getStudent().getUser().getId()
+                );
+            }
+            
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
+            throw mapIntegrityError(exception);
         }
     }
 
@@ -121,8 +163,39 @@ public class InvoiceService {
         if (request.getContractId() == null || request.getContractId() <= 0 || request.getRoomId() != null) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "ROOM_FEE requires a positive contractId and no roomId");
         }
-        Contract contract = contractRepository.findById(request.getContractId())
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist"));
+        Contract contract = invoiceCreationLockRepository.lockContract(request.getContractId());
+        if (contract == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
+        }
+        validateRoomFeeContract(contract, month);
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "ROOM_FEE invoice already exists for this contract and month");
+        }
+        return saveRoomFeeInvoice(contract, month);
+    }
+
+    @Transactional
+    public boolean createRoomFeeIfAbsent(Long contractId, YearMonth month) {
+        if (contractId == null || contractId <= 0 || month == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "A positive contractId and billing month are required");
+        }
+        Contract contract = invoiceCreationLockRepository.lockContract(contractId);
+        if (contract == null) {
+            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Contract does not exist");
+        }
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contractId, month)) {
+            return false;
+        }
+        if (YearMonth.from(contract.getStartDate()).equals(month)) {
+            throw new AppException(ErrorCode.BILLING_CONFLICT,
+                    "First-month ROOM_FEE must be created by Contract/Billing integration");
+        }
+        validateRoomFeeContract(contract, month);
+        saveRoomFeeInvoice(contract, month);
+        return true;
+    }
+
+    private void validateRoomFeeContract(Contract contract, YearMonth month) {
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
         if (contract.getStatus() != ContractStatus.ACTIVE
@@ -133,19 +206,49 @@ public class InvoiceService {
         if (contract.getMonthlyRent() == null || contract.getMonthlyRent().signum() < 0) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Contract monthly rent is invalid");
         }
-        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(request.getContractId(), month)) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "ROOM_FEE invoice already exists for this contract and month");
-        }
+    }
+
+    private InvoiceResponse saveRoomFeeInvoice(Contract contract, YearMonth month) {
         BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
         Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, month, rent);
         invoice.setContract(contract);
         attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            
+            // Send notification after ROOM_FEE invoice creation
+            if (saved.getContract() != null 
+                && saved.getContract().getStudent() != null 
+                && saved.getContract().getStudent().getUser() != null) {
+                String dueDate = saved.getDueDate() != null 
+                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "N/A";
+                notificationService.sendNotification(
+                    NotificationType.INVOICE_CREATED,
+                    "Hóa đơn mới",
+                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
+                        saved.getInvoiceType().name(), dueDate),
+                    saved.getInvoiceId(),
+                    saved.getContract().getStudent().getUser().getId()
+                );
+            }
+            
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT, "Invoice violates a database constraint or already exists");
+            throw mapIntegrityError(exception);
         }
+    }
+
+    private RuntimeException mapIntegrityError(DataIntegrityViolationException exception) {
+        Throwable cause = exception;
+        while (cause != null) {
+            if (cause instanceof SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return new AppException(ErrorCode.BILLING_CONFLICT,
+                        "Invoice violates a database constraint or already exists");
+            }
+            cause = cause.getCause();
+        }
+        return exception;
     }
 
     @Transactional(readOnly = true)

@@ -1,4 +1,29 @@
 package com.dormhub.entity.enums;
 
 public enum NotificationType {
+    // 1. Bảo trì (Phạm vi của bạn)
+    MAINTENANCE_STATUS_CHANGED,
+
+    // 2. Đăng ký & Phân phòng (Phạm vi của TV2)
+    APPLICATION_SUBMITTED,
+    APPLICATION_APPROVED,
+    APPLICATION_REJECTED,
+    ROOM_ASSIGNED,
+
+    // 3. Hợp đồng & Cư trú (Phạm vi của TV3)
+    CONTRACT_CREATED,
+    CONTRACT_ACTIVATED,
+    CHECKIN_REMINDER,
+    RENEWAL_PROCESSED,
+    TRANSFER_PROCESSED,
+    CHECKOUT_CONFIRMED,
+
+    // 4. Hóa đơn & Thanh toán (Phạm vi của TV4)
+    INVOICE_CREATED,
+    INVOICE_DUE_REMINDER,
+    PAYMENT_SUCCESS,
+    PAYMENT_FAILED,
+
+    // 5. Thông báo chung
+    GENERAL
 }

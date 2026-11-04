@@ -4,6 +4,8 @@ import com.dormhub.dto.response.InvoiceDetailResponse;
 import com.dormhub.dto.response.InvoiceResponse;
 import com.dormhub.dto.response.InvoiceSummaryResponse;
 import com.dormhub.entity.Invoice;
+import com.dormhub.entity.Contract;
+import com.dormhub.entity.Room;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -30,8 +32,12 @@ public class InvoiceMapper {
     }
 
     private Long roomId(Invoice invoice) {
-        return invoice.getRoom() != null ? invoice.getRoom().getId()
-                : invoice.getContract().getRoom().getId();
+        Room room = invoice.getRoom();
+        if (room != null) {
+            return room.getId();
+        }
+        Contract contract = invoice.getContract();
+        return contract != null && contract.getRoom() != null ? contract.getRoom().getId() : null;
     }
 
     private Long contractId(Invoice invoice) {

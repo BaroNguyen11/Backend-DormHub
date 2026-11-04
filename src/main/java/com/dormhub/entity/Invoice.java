@@ -2,7 +2,7 @@ package com.dormhub.entity;
 
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
-import com.dormhub.config.YearMonthAttributeConverter;
+import com.dormhub.converter.YearMonthAttributeConverter;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;

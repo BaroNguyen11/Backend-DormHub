@@ -1,4 +1,4 @@
-package com.dormhub.config;
+package com.dormhub.converter;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
