@@ -11,9 +11,9 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Optional;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 
 public interface ContractRepository extends JpaRepository<Contract, Long> {
 
@@ -30,6 +30,20 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
             @Param("gender") Gender gender);
 
     long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
+
+    @Query("select contract.room.id as roomId, count(contract.contractId) as holdCount "
+            + "from Contract contract "
+            + "where contract.room.id in :roomIds and contract.status in :statuses "
+            + "group by contract.room.id")
+    List<RoomHoldCountProjection> findRoomHoldCounts(
+            @Param("roomIds") Collection<Long> roomIds,
+            @Param("statuses") Collection<ContractStatus> statuses);
+
+    interface RoomHoldCountProjection {
+        Long getRoomId();
+
+        Long getHoldCount();
+    }
 
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
