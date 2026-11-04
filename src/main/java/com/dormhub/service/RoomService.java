@@ -12,6 +12,7 @@ import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.RoomMapper;
 import com.dormhub.repository.BuildingRepository;
 import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import jakarta.persistence.criteria.JoinType;
@@ -35,6 +36,7 @@ public class RoomService {
     private final RoomRepository roomRepository;
     private final BuildingRepository buildingRepository;
     private final ContractRepository contractRepository;
+    private final DormApplicationRepository dormApplicationRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final RoomMapper roomMapper;
 
@@ -110,6 +112,8 @@ public class RoomService {
         if (!room.getBuilding().getId().equals(building.getId())
                 && (occupiedAndHeld > 0
                 || roomAssignmentRepository.existsByRoom_Id(id))) {
+                || roomAssignmentRepository.existsByRoom_Id(id)
+                || dormApplicationRepository.existsByRequestedRoomId(id))) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
         }
 
@@ -157,6 +161,8 @@ public class RoomService {
         if (room.getCurrentOccupancy() > 0
                 || getPendingContractCount(id) > 0
                 || roomAssignmentRepository.existsByRoom_Id(id)) {
+                || roomAssignmentRepository.existsByRoom_Id(id)
+                || dormApplicationRepository.existsByRequestedRoomId(id)) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
         }
         roomRepository.delete(room);
