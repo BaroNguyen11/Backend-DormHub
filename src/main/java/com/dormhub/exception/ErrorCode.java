@@ -100,6 +100,15 @@ public enum ErrorCode {
     CONTRACT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái hợp đồng không cho phép thao tác này"),
     CONTRACT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin hợp đồng không hợp lệ"),
 
+    // Room transfer
+    TRANSFER_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu chuyển phòng"),
+    TRANSFER_ALREADY_PENDING(HttpStatus.CONFLICT, "Sinh viên đã có yêu cầu chuyển phòng đang chờ xử lý"),
+    TRANSFER_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái không cho phép xử lý yêu cầu chuyển phòng"),
+    TRANSFER_ROOM_REQUIRED(HttpStatus.BAD_REQUEST, "Cần chọn phòng đích để duyệt yêu cầu"),
+    TRANSFER_ROOM_NOT_AVAILABLE(HttpStatus.CONFLICT, "Phòng đích không còn chỗ hoặc không nhận sinh viên"),
+    TRANSFER_SAME_ROOM(HttpStatus.BAD_REQUEST, "Phòng đích phải khác phòng hiện tại"),
+    TRANSFER_PRICE_MISMATCH(HttpStatus.CONFLICT, "Chỉ được chuyển sang phòng cùng mức giá"),
+
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");
 
