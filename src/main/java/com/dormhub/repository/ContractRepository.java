@@ -29,6 +29,8 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
             @Param("statuses") Collection<ContractStatus> statuses,
             @Param("gender") Gender gender);
 
+    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
+
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
     Page<Contract> findAllByStatus(ContractStatus status, Pageable pageable);
@@ -43,7 +45,6 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select contract from Contract contract where contract.contractId = :contractId")
     Optional<Contract> findByContractIdForUpdate(@Param("contractId") Long contractId);
-    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
 
     /**
      * Find active contract for a room in a specific billing month.
@@ -59,4 +60,5 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         @Param("roomId") Long roomId,
         @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
     );
+
 }

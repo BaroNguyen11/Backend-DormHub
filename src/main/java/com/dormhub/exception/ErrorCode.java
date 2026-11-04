@@ -29,6 +29,8 @@ public enum ErrorCode {
 
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
+    STUDENT_PROFILE_INCOMPLETE(HttpStatus.BAD_REQUEST,
+            "Hồ sơ sinh viên cần đủ mã sinh viên, ngày sinh, giới tính và địa chỉ"),
     // Housing
     BUILDING_GENDER_POLICY_CONFIRMATION_REQUIRED(HttpStatus.CONFLICT,
             "Có sinh viên thuộc giới tính khác đang ở tòa nhà; xác nhận để đổi chính sách"),

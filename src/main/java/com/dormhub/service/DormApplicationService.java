@@ -260,7 +260,13 @@ public class DormApplicationService {
     }
 
     private void validateStudentProfile(Student student) {
-        if (student.getGender() == null || student.getGender() == Gender.OTHER) {
+        if (!StringUtils.hasText(student.getStudentCode())
+                || student.getDateOfBirth() == null
+                || !StringUtils.hasText(student.getAddress())) {
+            throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
+                    "Hồ sơ cần có mã sinh viên, ngày sinh và địa chỉ trước khi nộp đơn");
+        }
+        if (student.getGender() != Gender.MALE && student.getGender() != Gender.FEMALE) {
             throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
         }
     }
