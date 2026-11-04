@@ -2,6 +2,8 @@ package com.dormhub.repository;
 
 
 import com.dormhub.entity.Student;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -17,9 +19,14 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     Optional<Student> findByUserId(Long userId);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select student from Student student where student.user.id = :userId")
+    Optional<Student> findByUserIdForUpdate(@Param("userId") Long userId);
+
     Optional<Student> findByStudentCode(String studentCode);
 
     boolean existsByStudentCode(String studentCode);
+
     @Override
     @EntityGraph(attributePaths = {"user"})
     Page<Student> findAll(Specification<Student> spec, Pageable pageable);

@@ -31,6 +31,8 @@ public class BuildingRequest {
     private Integer totalFloors;
     
     private Gender genderRestriction;
+
+    private boolean confirmGenderPolicyChange;
     
     private String description;
 }

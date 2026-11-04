@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Lock;
 
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, Long> {
 
+    boolean existsByRoom_Id(Long roomId);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     Optional<RoomAssignment> findFirstByContract_ContractIdOrderByAssignmentIdDesc(Long contractId);
 }

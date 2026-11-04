@@ -2,6 +2,7 @@ package com.dormhub.repository;
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.Gender;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -17,6 +18,8 @@ import java.util.Collection;
 public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
+
+    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
 
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
@@ -42,4 +45,13 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         @Param("roomId") Long roomId,
         @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
     );
+
+    @Query("select case when count(contract) > 0 then true else false end "
+            + "from Contract contract join contract.room room join room.building building "
+            + "where building.id = :buildingId and contract.status in :statuses "
+            + "and contract.student.gender <> :gender")
+    boolean existsCurrentContractWithDifferentGender(
+            @Param("buildingId") Long buildingId,
+            @Param("statuses") Collection<ContractStatus> statuses,
+            @Param("gender") Gender gender);
 }
