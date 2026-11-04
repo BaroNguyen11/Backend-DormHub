@@ -19,6 +19,16 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
 
+    @Query("select case when count(contract) > 0 then true else false end "
+            + "from Contract contract "
+            + "where contract.room.building.id = :buildingId "
+            + "and contract.status in :statuses "
+            + "and (contract.student.gender is null or contract.student.gender <> :gender)")
+    boolean existsCurrentContractWithDifferentGender(
+            @Param("buildingId") Long buildingId,
+            @Param("statuses") Collection<ContractStatus> statuses,
+            @Param("gender") Gender gender);
+
     long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
 
     @Query("select contract.room.id as roomId, count(contract.contractId) as holdCount "
@@ -41,6 +51,11 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     Page<Contract> findAllByStudent_IdAndStatus(
             Long studentId, ContractStatus status, Pageable pageable);
+
+    Optional<Contract> findByDormApplication_Id(Long dormApplicationId);
+
+    List<Contract> findAllByDormApplication_IdIn(List<Long> dormApplicationIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select contract from Contract contract where contract.contractId = :contractId")
     Optional<Contract> findByContractIdForUpdate(@Param("contractId") Long contractId);
@@ -60,12 +75,4 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
     );
 
-    @Query("select case when count(contract) > 0 then true else false end "
-            + "from Contract contract join contract.room room join room.building building "
-            + "where building.id = :buildingId and contract.status in :statuses "
-            + "and contract.student.gender <> :gender")
-    boolean existsCurrentContractWithDifferentGender(
-            @Param("buildingId") Long buildingId,
-            @Param("statuses") Collection<ContractStatus> statuses,
-            @Param("gender") Gender gender);
 }

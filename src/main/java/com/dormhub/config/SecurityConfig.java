@@ -98,9 +98,9 @@ public class SecurityConfig {
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
                         .requestMatchers("/api/v1/notifications/**").authenticated()
-                        .requestMatchers("/api/v1/contracts/**").hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
+                        .requestMatchers("/api/v1/contracts", "/api/v1/contracts/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
                         )
