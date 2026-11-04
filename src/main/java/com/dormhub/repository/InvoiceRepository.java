@@ -30,6 +30,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     boolean existsByContract_ContractIdAndStatus(Long contractId, InvoiceStatus status);
 
+    Optional<Invoice> findByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select invoice from Invoice invoice where invoice.contract.contractId = :contractId "
+            + "and invoice.invoiceType = :invoiceType")
+    Optional<Invoice> findByContract_ContractIdAndInvoiceTypeForUpdate(
+            @Param("contractId") Long contractId,
+            @Param("invoiceType") InvoiceType invoiceType);
+
+    List<Invoice> findAllByContract_ContractIdInAndInvoiceType(
+            List<Long> contractIds, InvoiceType invoiceType);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select invoice from Invoice invoice where invoice.invoiceId = :invoiceId")
     Optional<Invoice> findByIdForUpdate(@Param("invoiceId") Long invoiceId);

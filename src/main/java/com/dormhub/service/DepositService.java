@@ -28,13 +28,16 @@ public class DepositService {
     private final InvoiceRepository invoiceRepository;
     private final InvoiceCreationLockRepository invoiceCreationLockRepository;
     private final NotificationService notificationService;
+    private final RoomAssignmentService roomAssignmentService;
 
     public DepositService(InvoiceRepository invoiceRepository,
                           InvoiceCreationLockRepository invoiceCreationLockRepository,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          RoomAssignmentService roomAssignmentService) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.notificationService = notificationService;
+        this.roomAssignmentService = roomAssignmentService;
     }
 
     @Transactional
@@ -42,31 +45,22 @@ public class DepositService {
         if (contractId == null || contractId <= 0) {
             throw new AppException(ErrorCode.DEPOSIT_INVALID, "contractId phải là số dương");
         }
-
         Contract contract = invoiceCreationLockRepository.lockContract(contractId);
         if (contract == null) {
-            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hợp đồng");
+            throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
         }
-        if (!isWaitingForDeposit(contract)) {
+        if (contract.getStatus() != ContractStatus.PENDING
+                || contract.getDepositStatus() != DepositStatus.UNPAID) {
             throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Chỉ có thể tạo hóa đơn đặt cọc cho hợp đồng DRAFT hoặc PENDING");
+                    "Chỉ tạo hóa đơn cọc cho hợp đồng PENDING chưa thanh toán");
         }
         if (contract.getDepositAmount() == null || contract.getDepositAmount().signum() <= 0) {
-            throw new AppException(ErrorCode.DEPOSIT_INVALID,
-                    "Số tiền đặt cọc của hợp đồng phải lớn hơn 0");
+            throw new AppException(ErrorCode.DEPOSIT_INVALID, "Tiền cọc phải lớn hơn 0");
         }
-        if (contract.getDepositStatus() != null
-                && contract.getDepositStatus() != DepositStatus.UNPAID) {
-            throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Hợp đồng không còn ở trạng thái chờ thanh toán cọc");
-        }
-        if (invoiceRepository.existsByContract_ContractIdAndInvoiceType(
-                contractId, InvoiceType.DEPOSIT)) {
-            throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Hợp đồng đã có hóa đơn đặt cọc");
+        if (invoiceRepository.existsByContract_ContractIdAndInvoiceType(contractId, InvoiceType.DEPOSIT)) {
+            throw new AppException(ErrorCode.DEPOSIT_CONFLICT, "Hợp đồng đã có hóa đơn cọc");
         }
 
-        contract.setDepositStatus(DepositStatus.UNPAID);
         Invoice invoice = new Invoice();
         invoice.setInvoiceType(InvoiceType.DEPOSIT);
         invoice.setContract(contract);
@@ -84,29 +78,25 @@ public class DepositService {
         detail.setAmount(contract.getDepositAmount());
         invoice.getDetails().add(detail);
 
-        Invoice savedInvoice = invoiceRepository.saveAndFlush(invoice);
-        return toResponse(contract, savedInvoice);
+        Invoice saved = invoiceRepository.saveAndFlush(invoice);
+        return toResponse(contract, saved);
     }
 
-    // PaymentService calls this after recording a successful deposit payment.
+    // Called by the payment flow only after a successful payment has been recorded.
     @Transactional
     public DepositFlowResponse confirmDepositPaid(Long invoiceId) {
         if (invoiceId == null || invoiceId <= 0) {
             throw new AppException(ErrorCode.DEPOSIT_INVALID, "invoiceId phải là số dương");
         }
-
         Invoice invoice = invoiceRepository.findByIdForUpdate(invoiceId)
-                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND,
-                        "Không tìm thấy hóa đơn đặt cọc"));
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND));
         if (invoice.getInvoiceType() != InvoiceType.DEPOSIT || invoice.getContract() == null) {
-            throw new AppException(ErrorCode.DEPOSIT_INVALID,
-                    "Hóa đơn không thuộc luồng đặt cọc hợp đồng");
+            throw new AppException(ErrorCode.DEPOSIT_INVALID, "Hóa đơn không thuộc luồng đặt cọc");
         }
-
-        Contract contract = invoiceCreationLockRepository
-                .lockContract(invoice.getContract().getContractId());
+        Contract contract = invoiceCreationLockRepository.lockContract(
+                invoice.getContract().getContractId());
         if (contract == null) {
-            throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hợp đồng");
+            throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
         }
 
         if (invoice.getStatus() == InvoiceStatus.PAID
@@ -115,56 +105,35 @@ public class DepositService {
             return toResponse(contract, invoice);
         }
         if (invoice.getStatus() != InvoiceStatus.UNPAID
-                && invoice.getStatus() != InvoiceStatus.PAID) {
-            throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Hóa đơn không ở trạng thái có thể xác nhận thanh toán");
-        }
-        if (!isWaitingForDeposit(contract)) {
-            throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Chỉ có thể kích hoạt hợp đồng đang chờ thanh toán cọc");
-        }
-        if (contract.getDepositAmount() == null || invoice.getTotalAmount() == null
+                || contract.getStatus() != ContractStatus.PENDING
+                || contract.getDepositStatus() != DepositStatus.UNPAID
+                || contract.getDepositAmount() == null
+                || invoice.getTotalAmount() == null
                 || invoice.getTotalAmount().compareTo(contract.getDepositAmount()) != 0) {
             throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Số tiền hóa đơn đặt cọc không khớp với hợp đồng");
-        }
-        if (contract.getDepositStatus() != null
-                && contract.getDepositStatus() != DepositStatus.UNPAID) {
-            throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
-                    "Trạng thái đặt cọc của hợp đồng không hợp lệ");
+                    "Hóa đơn hoặc hợp đồng không còn ở trạng thái chờ thanh toán cọc");
         }
 
         invoice.setStatus(InvoiceStatus.PAID);
         contract.setStatus(ContractStatus.ACTIVE);
         contract.setDepositStatus(DepositStatus.HELD);
-        
-        // Send notification after deposit payment success and contract activation
+        roomAssignmentService.assign(contract.getContractId());
+
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
             notificationService.sendNotification(
-                NotificationType.PAYMENT_SUCCESS,
-                "Thanh toán thành công",
-                "Thanh toán tiền cọc thành công. Hợp đồng đã được kích hoạt",
-                invoice.getInvoiceId(),
-                contract.getStudent().getUser().getId()
-            );
+                    NotificationType.PAYMENT_SUCCESS,
+                    "Thanh toán thành công",
+                    "Thanh toán tiền cọc thành công. Hợp đồng đã được kích hoạt",
+                    invoice.getInvoiceId(),
+                    contract.getStudent().getUser().getId());
         }
-        
         return toResponse(contract, invoice);
-    }
-
-    private boolean isWaitingForDeposit(Contract contract) {
-        return contract.getStatus() == ContractStatus.DRAFT
-                || contract.getStatus() == ContractStatus.PENDING;
     }
 
     private DepositFlowResponse toResponse(Contract contract, Invoice invoice) {
         return new DepositFlowResponse(
-                contract.getContractId(),
-                invoice.getInvoiceId(),
-                invoice.getStatus(),
-                contract.getStatus(),
-                contract.getDepositStatus(),
-                invoice.getTotalAmount(),
+                contract.getContractId(), invoice.getInvoiceId(), invoice.getStatus(),
+                contract.getStatus(), contract.getDepositStatus(), invoice.getTotalAmount(),
                 invoice.getDueDate());
     }
 }
