@@ -159,8 +159,8 @@ public class RoomService {
             throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_CONTRACTS);
         }
         if (!room.getBuilding().getId().equals(building.getId())
-                && (totalOccupiedOrReserved > 0 || roomAssignmentRepository.existsByRoomIdAndStatus(
-                        id, RoomAssignmentStatus.ASSIGNED))) {
+                && (totalOccupiedOrReserved > 0 || roomAssignmentRepository.existsByRoom_IdAndStatusIn(
+                        id, List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN)))) {
             throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_ASSIGNMENTS);
         }
         if (!room.getBuilding().getId().equals(building.getId())
@@ -183,7 +183,7 @@ public class RoomService {
     public void delete(Long id) {
         Room room = roomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        if (roomAssignmentRepository.existsByRoomId(id)
+        if (roomAssignmentRepository.existsByRoom_Id(id)
                 || dormApplicationRepository.existsByRequestedRoomId(id)) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
         }

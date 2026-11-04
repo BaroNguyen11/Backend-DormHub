@@ -1,7 +1,7 @@
 package com.dormhub.entity;
 
 import com.dormhub.entity.enums.ReadingStatus;
-import com.dormhub.config.YearMonthAttributeConverter;
+import com.dormhub.converter.YearMonthAttributeConverter;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;

@@ -29,8 +29,6 @@ public enum ErrorCode {
 
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
-    STUDENT_PROFILE_INCOMPLETE(HttpStatus.BAD_REQUEST, "Hồ sơ sinh viên chưa đủ thông tin để đăng ký"),
-
     // Building
     BUILDING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tòa nhà"),
     BUILDING_HAS_ROOMS(HttpStatus.CONFLICT, "Không thể xóa tòa nhà đang có phòng"),
@@ -49,7 +47,6 @@ public enum ErrorCode {
     ROOM_NOT_AVAILABLE(HttpStatus.CONFLICT, "Phòng không ở trạng thái có thể đăng ký"),
 
     // Contract and deposit workflow
-    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
     CONTRACT_ALREADY_EXISTS(HttpStatus.CONFLICT, "Đơn đăng ký đã có hợp đồng"),
     CONTRACT_NOT_PENDING(HttpStatus.CONFLICT, "Hợp đồng không ở trạng thái chờ xử lý"),
     CONTRACT_NOT_ACTIVE(HttpStatus.CONFLICT, "Chỉ hợp đồng đang hiệu lực mới được phân phòng"),
@@ -69,8 +66,7 @@ public enum ErrorCode {
     DORM_APPLICATION_NOT_APPROVED(HttpStatus.CONFLICT, "Chỉ có thể phân phòng cho đơn đã được duyệt"),
     STUDENT_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Sinh viên đã được phân phòng"),
     DORM_APPLICATION_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Đơn đăng ký đã có phân phòng đang hiệu lực"),
-    ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng"),
-
+    ROOM_ASSIGNMENT_APPROVER_REQUIRED(HttpStatus.CONFLICT, "Không xác định được quản lý đã duyệt đơn để ghi nhận người phân phòng"),
     // OTP
     OTP_INVALID(HttpStatus.BAD_REQUEST, "Mã OTP không chính xác"),
     OTP_EXPIRED(HttpStatus.BAD_REQUEST, "Mã OTP đã hết hạn"),
@@ -82,7 +78,12 @@ public enum ErrorCode {
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
     ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
+    ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng hiện tại của hợp đồng"),
+    ROOM_ASSIGNMENT_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái phân phòng không cho phép thao tác này"),
+    CONTRACT_HAS_UNPAID_INVOICES(HttpStatus.CONFLICT, "Hợp đồng còn hóa đơn chưa thanh toán"),
     MAINTENANCE_INVALID_STATUS(HttpStatus.BAD_REQUEST, "Yêu cầu không hợp lệ"),
+    REJECTION_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập lý do khi từ chối yêu cầu bảo trì"),
 
     // Database
     DATA_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu xung đột hoặc vi phạm ràng buộc"),
@@ -90,7 +91,13 @@ public enum ErrorCode {
     // Billing
     BILLING_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy dữ liệu hóa đơn"),
     BILLING_CONFLICT(HttpStatus.CONFLICT, "Dữ liệu Billing xung đột"),
-    DEPOSIT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "Hóa đơn cọc chỉ được tạo tự động trong luồng hợp đồng"),
+    DEPOSIT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ tạo hóa đơn DEPOSIT"),
+    DEPOSIT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin đặt cọc không hợp lệ"),
+    DEPOSIT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái đặt cọc không cho phép thao tác này"),
+
+    // Contract
+    CONTRACT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái hợp đồng không cho phép thao tác này"),
+    CONTRACT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin hợp đồng không hợp lệ"),
 
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");

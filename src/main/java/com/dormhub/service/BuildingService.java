@@ -23,6 +23,9 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class BuildingService {
 
+    private static final List<RoomAssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
+            List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN);
+
     private final BuildingRepository buildingRepository;
     private final RoomRepository roomRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
@@ -51,8 +54,8 @@ public class BuildingService {
         Building building = buildingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
         if (building.getGenderPolicy() != request.getGenderPolicy()
-                && (roomAssignmentRepository.existsByRoomBuildingIdAndStatus(
-                            id, RoomAssignmentStatus.ASSIGNED)
+                && (roomAssignmentRepository.existsByRoom_Building_IdAndStatusIn(
+                            id, ACTIVE_ASSIGNMENT_STATUSES)
                     || dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
                             id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED)))) {
             throw new AppException(ErrorCode.BUILDING_GENDER_POLICY_IN_USE);

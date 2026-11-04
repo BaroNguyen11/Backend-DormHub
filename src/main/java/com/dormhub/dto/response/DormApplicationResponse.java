@@ -3,9 +3,8 @@ package com.dormhub.dto.response;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 
-import java.time.LocalDateTime;
-import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record DormApplicationResponse(
         Long id,
@@ -26,7 +25,7 @@ public record DormApplicationResponse(
         LocalDateTime updatedAt,
         Long contractId,
         Long depositInvoiceId,
-        LocalDate contractStartDate,
-        LocalDate contractEndDate,
+        LocalDateTime contractStartDate,
+        LocalDateTime contractEndDate,
         BigDecimal depositAmount) {
 }

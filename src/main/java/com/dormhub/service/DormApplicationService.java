@@ -8,6 +8,7 @@ import com.dormhub.entity.DormApplication;
 import com.dormhub.entity.Invoice;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.Student;
+import com.dormhub.entity.User;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
@@ -21,6 +22,7 @@ import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
+import com.dormhub.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -50,6 +52,7 @@ public class DormApplicationService {
     private final InvoiceRepository invoiceRepository;
     private final StudentRepository studentRepository;
     private final RoomRepository roomRepository;
+    private final UserRepository userRepository;
     private final ContractService contractService;
     private final DormApplicationMapper dormApplicationMapper;
 
@@ -145,7 +148,8 @@ public class DormApplicationService {
     @Transactional
     public DormApplicationResponse review(
             Long applicationId,
-            DormApplicationReviewRequest request) {
+            DormApplicationReviewRequest request,
+            Long reviewerUserId) {
         if (request.getStatus() != DormApplicationStatus.APPROVED
                 && request.getStatus() != DormApplicationStatus.REJECTED) {
             throw new AppException(ErrorCode.DORM_APPLICATION_INVALID_REVIEW_STATUS);
@@ -163,6 +167,11 @@ public class DormApplicationService {
         application.setStatus(request.getStatus());
         application.setReviewNote(normalizeNote(request.getNote()));
         application.setProcessedAt(LocalDateTime.now());
+        if (reviewerUserId == null) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        User reviewer = userRepository.getReferenceById(reviewerUserId);
+        application.setProcessedBy(reviewer);
         if (request.getStatus() == DormApplicationStatus.APPROVED) {
             contractService.createPendingForApprovedApplication(application);
         }
@@ -177,7 +186,7 @@ public class DormApplicationService {
 
         List<Long> applicationIds = content.stream().map(DormApplication::getId).toList();
         Map<Long, Contract> contractsByApplicationId = contractRepository
-                .findAllByDormApplicationIdIn(applicationIds).stream()
+                .findAllByDormApplication_IdIn(applicationIds).stream()
                 .collect(Collectors.toMap(contract -> contract.getDormApplication().getId(), Function.identity()));
         List<Long> contractIds = contractsByApplicationId.values().stream()
                 .map(Contract::getContractId).toList();
@@ -195,7 +204,7 @@ public class DormApplicationService {
     }
 
     private DormApplicationResponse toResponse(DormApplication application) {
-        Contract contract = contractRepository.findByDormApplicationId(application.getId()).orElse(null);
+        Contract contract = contractRepository.findByDormApplication_Id(application.getId()).orElse(null);
         Invoice invoice = contract == null ? null : invoiceRepository
                 .findByContract_ContractIdAndInvoiceType(contract.getContractId(), InvoiceType.DEPOSIT)
                 .orElse(null);
@@ -248,14 +257,7 @@ public class DormApplicationService {
     }
 
     private void validateStudentProfile(Student student) {
-        if (!StringUtils.hasText(student.getStudentCode())
-                || student.getDateOfBirth() == null
-                || student.getGender() == null
-                || !StringUtils.hasText(student.getAddress())) {
-            throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
-                    "Hồ sơ cần có mã sinh viên, ngày sinh, giới tính và địa chỉ trước khi nộp đơn");
-        }
-        if (student.getGender() == Gender.OTHER) {
+        if (student.getGender() == null || student.getGender() == Gender.OTHER) {
             throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
         }
     }

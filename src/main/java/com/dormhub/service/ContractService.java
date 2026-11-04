@@ -1,61 +1,109 @@
 package com.dormhub.service;
 
+import com.dormhub.dto.request.CreateContractRequest;
+import com.dormhub.dto.request.UpdateContractRequest;
+import com.dormhub.dto.response.ContractResponse;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.DormApplication;
-import com.dormhub.entity.Invoice;
 import com.dormhub.entity.Room;
+import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DepositStatus;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
-import com.dormhub.entity.enums.InvoiceStatus;
-import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
+import com.dormhub.mapper.ContractMapper;
 import com.dormhub.repository.ContractRepository;
-import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomRepository;
-import lombok.RequiredArgsConstructor;
+import com.dormhub.repository.StudentRepository;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.List;
-
 @Service
-@RequiredArgsConstructor
 public class ContractService {
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    private static final int CONTRACT_DURATION_MONTHS = 12;
+
+    private static final List<ContractStatus> OPEN_CONTRACT_STATUSES =
+            List.of(ContractStatus.PENDING, ContractStatus.ACTIVE);
 
     private final ContractRepository contractRepository;
-    private final InvoiceRepository invoiceRepository;
     private final RoomRepository roomRepository;
-    private final InvoiceService invoiceService;
-    private final RoomAssignmentService roomAssignmentService;
+    private final StudentRepository studentRepository;
+    private final ContractMapper contractMapper;
+    private final DepositService depositService;
+
+    public ContractService(ContractRepository contractRepository, RoomRepository roomRepository,
+                           StudentRepository studentRepository, ContractMapper contractMapper,
+                           DepositService depositService) {
+        this.contractRepository = contractRepository;
+        this.roomRepository = roomRepository;
+        this.studentRepository = studentRepository;
+        this.contractMapper = contractMapper;
+        this.depositService = depositService;
+    }
+
+    @Transactional
+    public ContractResponse create(CreateContractRequest request) {
+        validateDateRange(request.getStartDate(), request.getEndDate());
+        Room room = roomRepository.findById(request.getRoomId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        Student student = studentRepository.findById(request.getStudentId())
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+
+        if (contractRepository.existsByStudent_IdAndStatusIn(
+                request.getStudentId(), OPEN_CONTRACT_STATUSES)) {
+            throw new AppException(ErrorCode.CONTRACT_CONFLICT,
+                    "Sinh viên đã có hợp đồng PENDING hoặc ACTIVE");
+        }
+
+        Contract contract = contractMapper.toEntity(request, room, student);
+        return contractMapper.toResponse(contractRepository.save(contract));
+    }
 
     @Transactional
     public Contract createPendingForApprovedApplication(DormApplication application) {
         if (application.getStatus() != DormApplicationStatus.APPROVED) {
             throw new AppException(ErrorCode.DORM_APPLICATION_NOT_APPROVED);
         }
-        if (contractRepository.findByDormApplicationId(application.getId()).isPresent()) {
+        if (contractRepository.findByDormApplication_Id(application.getId()).isPresent()) {
             throw new AppException(ErrorCode.CONTRACT_ALREADY_EXISTS);
         }
-        if (contractRepository.existsByStudentIdAndStatusIn(application.getStudent().getId(),
-                List.of(ContractStatus.PENDING, ContractStatus.ACTIVE))) {
-            throw new AppException(ErrorCode.CONTRACT_ALREADY_EXISTS);
+
+        Student student = studentRepository.findByUserIdForUpdate(
+                        application.getStudent().getUser().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        if (contractRepository.existsByStudent_IdAndStatusIn(student.getId(), OPEN_CONTRACT_STATUSES)) {
+            throw new AppException(ErrorCode.CONTRACT_CONFLICT,
+                    "Sinh viên đã có hợp đồng PENDING hoặc ACTIVE");
         }
 
         Room room = roomRepository.findByIdForUpdate(application.getRequestedRoom().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        ensureStudentMatchesBuilding(application, room);
-
+        BuildingGenderPolicy policy = room.getBuilding().getGenderPolicy();
+        Gender gender = student.getGender();
+        if (policy == null) {
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
+        }
+        if (gender == null || gender == Gender.OTHER) {
+            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
+        }
+        boolean genderMatches = policy == BuildingGenderPolicy.MALE_ONLY
+                ? gender == Gender.MALE
+                : gender == Gender.FEMALE;
+        if (!genderMatches) {
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
+        }
         if (room.getStatus() == RoomStatus.MAINTENANCE || room.getStatus() == RoomStatus.INACTIVE) {
             throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
         }
@@ -67,26 +115,29 @@ public class ContractService {
             throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
         }
 
-        BigDecimal roomPrice = room.getPrice();
-        if (roomPrice == null || roomPrice.signum() <= 0) {
+        BigDecimal price = room.getPrice();
+        if (price == null || price.signum() <= 0) {
             throw new AppException(ErrorCode.CONTRACT_RENT_INVALID);
         }
-        BigDecimal monthlyRent = roomPrice.setScale(0, RoundingMode.HALF_UP);
+        BigDecimal monthlyRent = price.setScale(0, RoundingMode.HALF_UP);
         if (monthlyRent.signum() <= 0) {
             throw new AppException(ErrorCode.CONTRACT_RENT_INVALID);
         }
 
-        LocalDate startDate = LocalDate.now(BUSINESS_ZONE);
+        LocalDateTime startDate = application.getProcessedAt() == null
+                ? LocalDateTime.now(BUSINESS_ZONE)
+                : application.getProcessedAt();
         Contract contract = new Contract();
         contract.setDormApplication(application);
-        contract.setStudent(application.getStudent());
         contract.setRoom(room);
+        contract.setStudent(student);
         contract.setStartDate(startDate);
-        contract.setEndDate(startDate.plusMonths(CONTRACT_DURATION_MONTHS));
+        contract.setEndDate(startDate.plusMonths(12));
         contract.setMonthlyRent(monthlyRent);
         contract.setDepositAmount(monthlyRent);
+        contract.setDepositStatus(DepositStatus.UNPAID);
         contract.setStatus(ContractStatus.PENDING);
-        contract.setDescription("Hợp đồng nội trú 12 tháng được tạo từ đơn " + application.getId());
+        contract.setDescription("Hợp đồng nội trú 12 tháng từ đơn " + application.getId());
 
         Contract saved = contractRepository.saveAndFlush(contract);
         room.setReservedOccupancy(room.getReservedOccupancy() + 1);
@@ -94,45 +145,66 @@ public class ContractService {
             room.setStatus(RoomStatus.FULL);
         }
         roomRepository.save(room);
-        invoiceService.createDepositInvoice(saved);
+        depositService.createDepositInvoice(saved.getContractId());
         return saved;
     }
 
-    /** Called by the Payment module after it has marked the deposit invoice as paid. */
-    @Transactional
-    public void activateAfterDepositPayment(Long contractId) {
-        Contract contract = contractRepository.findByIdForUpdate(contractId)
-                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
-        if (contract.getStatus() != ContractStatus.PENDING) {
-            throw new AppException(ErrorCode.CONTRACT_NOT_PENDING);
-        }
-
-        Invoice depositInvoice = invoiceRepository
-                .findByContract_ContractIdAndInvoiceType(contractId, InvoiceType.DEPOSIT)
-                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_DEPOSIT_NOT_PAID));
-        if (depositInvoice.getStatus() != InvoiceStatus.PAID) {
-            throw new AppException(ErrorCode.CONTRACT_DEPOSIT_NOT_PAID);
-        }
-
-        contract.setStatus(ContractStatus.ACTIVE);
-        contractRepository.save(contract);
-        roomAssignmentService.assign(contractId);
+    @Transactional(readOnly = true)
+    public ContractResponse getById(Long contractId) {
+        return contractMapper.toResponse(findContract(contractId));
     }
 
-    private void ensureStudentMatchesBuilding(DormApplication application, Room room) {
-        BuildingGenderPolicy policy = room.getBuilding().getGenderPolicy();
-        Gender gender = application.getStudent().getGender();
-        if (policy == null) {
-            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
+    @Transactional(readOnly = true)
+    public Page<ContractResponse> search(Long studentId, ContractStatus status, Pageable pageable) {
+        Page<Contract> contracts;
+        if (studentId != null && status != null) {
+            contracts = contractRepository.findAllByStudent_IdAndStatus(studentId, status, pageable);
+        } else if (studentId != null) {
+            contracts = contractRepository.findAllByStudent_Id(studentId, pageable);
+        } else if (status != null) {
+            contracts = contractRepository.findAllByStatus(status, pageable);
+        } else {
+            contracts = contractRepository.findAll(pageable);
         }
-        if (gender == Gender.OTHER || gender == null) {
-            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
+        return contracts.map(contractMapper::toResponse);
+    }
+
+    @Transactional
+    public ContractResponse updatePending(Long contractId, UpdateContractRequest request) {
+        validateDateRange(request.getStartDate(), request.getEndDate());
+        Contract contract = findContract(contractId);
+        ensurePending(contract, "Chỉ có thể cập nhật hợp đồng PENDING");
+        contract.updatePending(request.getStartDate(), request.getEndDate(),
+                request.getMonthlyRent(), request.getDepositAmount(), request.getDescription());
+        return contractMapper.toResponse(contractRepository.save(contract));
+    }
+
+    @Transactional
+    public ContractResponse cancelPending(Long contractId) {
+        Contract contract = findContract(contractId);
+        ensurePending(contract, "Chỉ có thể hủy hợp đồng PENDING");
+        contract.cancelPending();
+        return contractMapper.toResponse(contractRepository.save(contract));
+    }
+
+    private Contract findContract(Long contractId) {
+        if (contractId == null || contractId <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "contractId phải là số dương");
         }
-        boolean matches = policy == BuildingGenderPolicy.MALE_ONLY
-                ? gender == Gender.MALE
-                : gender == Gender.FEMALE;
-        if (!matches) {
-            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
+        return contractRepository.findById(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+    }
+
+    private void ensurePending(Contract contract, String message) {
+        if (contract.getStatus() != ContractStatus.PENDING) {
+            throw new AppException(ErrorCode.CONTRACT_CONFLICT, message);
+        }
+    }
+
+    private void validateDateRange(LocalDateTime startDate, LocalDateTime endDate) {
+        if (startDate == null || endDate == null || !endDate.isAfter(startDate)) {
+            throw new AppException(ErrorCode.CONTRACT_INVALID,
+                    "Ngày kết thúc phải sau ngày bắt đầu");
         }
     }
 }

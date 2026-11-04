@@ -8,19 +8,22 @@ import org.springframework.stereotype.Component;
 public class RoomAssignmentMapper {
 
     public RoomAssignmentResponse toResponse(RoomAssignment assignment) {
-        return new RoomAssignmentResponse(
-                assignment.getId(),
-                assignment.getDormApplication().getId(),
-                assignment.getContract() == null ? null : assignment.getContract().getContractId(),
-                assignment.getDormApplication().getStudent().getId(),
-                assignment.getDormApplication().getStudent().getStudentCode(),
-                assignment.getDormApplication().getStudent().getUser().getFullName(),
-                assignment.getRoom().getId(),
-                assignment.getRoom().getBuilding().getId(),
-                assignment.getRoom().getBuilding().getBuildingName(),
-                assignment.getRoom().getRoomNumber(),
-                assignment.getStatus(),
-                assignment.getAssignedAt(),
-                assignment.getNote());
+        if (assignment == null) {
+            return null;
+        }
+
+        return RoomAssignmentResponse.builder()
+                .assignmentId(assignment.getAssignmentId())
+                .contractId(assignment.getContract().getContractId())
+                .studentId(assignment.getStudent().getId())
+                .roomId(assignment.getRoom().getId())
+                .assignedById(assignment.getAssignedBy() == null
+                        ? null : assignment.getAssignedBy().getId())
+                .assignmentStatus(assignment.getStatus())
+                .contractStatus(assignment.getContract().getStatus())
+                .assignedAt(assignment.getAssignedAt())
+                .checkInAt(assignment.getCheckInAt())
+                .checkOutAt(assignment.getCheckOutAt())
+                .build();
     }
 }

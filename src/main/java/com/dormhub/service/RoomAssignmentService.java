@@ -8,8 +8,10 @@ import com.dormhub.entity.Invoice;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
+import com.dormhub.entity.User;
 import com.dormhub.entity.enums.BuildingGenderPolicy;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DepositStatus;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.InvoiceStatus;
@@ -25,7 +27,7 @@ import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
-import lombok.RequiredArgsConstructor;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -34,11 +36,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class RoomAssignmentService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final List<RoomAssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
+            List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN);
 
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final ContractRepository contractRepository;
@@ -48,38 +51,59 @@ public class RoomAssignmentService {
     private final StudentRepository studentRepository;
     private final RoomAssignmentMapper roomAssignmentMapper;
 
+    public RoomAssignmentService(
+            RoomAssignmentRepository roomAssignmentRepository,
+            ContractRepository contractRepository,
+            InvoiceRepository invoiceRepository,
+            RoomRepository roomRepository,
+            BuildingRepository buildingRepository,
+            StudentRepository studentRepository,
+            RoomAssignmentMapper roomAssignmentMapper) {
+        this.roomAssignmentRepository = roomAssignmentRepository;
+        this.contractRepository = contractRepository;
+        this.invoiceRepository = invoiceRepository;
+        this.roomRepository = roomRepository;
+        this.buildingRepository = buildingRepository;
+        this.studentRepository = studentRepository;
+        this.roomAssignmentMapper = roomAssignmentMapper;
+    }
+
     @Transactional
     public RoomAssignmentResponse assign(Long contractId) {
-        Contract contract = contractRepository.findByIdForUpdate(contractId)
+        Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
-        if (contract.getStatus() != ContractStatus.ACTIVE) {
+        if (contract.getStatus() != ContractStatus.ACTIVE
+                || contract.getDepositStatus() != DepositStatus.HELD) {
             throw new AppException(ErrorCode.CONTRACT_NOT_ACTIVE);
         }
+
         Invoice depositInvoice = invoiceRepository
                 .findByContract_ContractIdAndInvoiceType(contractId, InvoiceType.DEPOSIT)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_DEPOSIT_NOT_PAID));
         if (depositInvoice.getStatus() != InvoiceStatus.PAID) {
             throw new AppException(ErrorCode.CONTRACT_DEPOSIT_NOT_PAID);
         }
+
         DormApplication application = contract.getDormApplication();
-        if (application == null) {
-            throw new AppException(ErrorCode.DORM_APPLICATION_NOT_FOUND);
-        }
-        if (application.getStatus() != DormApplicationStatus.APPROVED) {
+        if (application == null || application.getStatus() != DormApplicationStatus.APPROVED) {
             throw new AppException(ErrorCode.DORM_APPLICATION_NOT_APPROVED);
         }
         if (contract.getStudent() == null || contract.getRoom() == null) {
             throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
         }
+        User approver = application.getProcessedBy();
+        if (approver == null || approver.getId() == null) {
+            throw new AppException(ErrorCode.ROOM_ASSIGNMENT_APPROVER_REQUIRED);
+        }
 
         Student student = studentRepository.findByUserIdForUpdate(contract.getStudent().getUser().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
-        if (roomAssignmentRepository.existsByDormApplicationStudentIdAndStatus(
-                student.getId(), RoomAssignmentStatus.ASSIGNED)) {
+        if (roomAssignmentRepository.existsByStudent_IdAndStatusIn(
+                student.getId(), ACTIVE_ASSIGNMENT_STATUSES)) {
             throw new AppException(ErrorCode.STUDENT_ALREADY_ASSIGNED);
         }
-        if (roomAssignmentRepository.existsByContractContractIdAndStatus(
-                contractId, RoomAssignmentStatus.ASSIGNED)) {
+        if (roomAssignmentRepository.existsByContract_ContractIdAndStatusIn(
+                contractId, ACTIVE_ASSIGNMENT_STATUSES)) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ALREADY_ASSIGNED);
         }
 
@@ -87,7 +111,6 @@ public class RoomAssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         Building building = buildingRepository.findByIdForUpdate(room.getBuilding().getId())
                 .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
-
         ensureGenderMatches(student.getGender(), building.getGenderPolicy());
 
         if (room.getReservedOccupancy() <= 0
@@ -100,19 +123,17 @@ public class RoomAssignmentService {
         }
 
         RoomAssignment assignment = new RoomAssignment();
-        assignment.setDormApplication(application);
+        assignment.setStudent(student);
         assignment.setContract(contract);
         assignment.setRoom(room);
+        assignment.setAssignedBy(approver);
         assignment.setStatus(RoomAssignmentStatus.ASSIGNED);
-        assignment.setNote(application.getNote());
 
         room.setReservedOccupancy(room.getReservedOccupancy() - 1);
         room.setCurrentOccupancy(room.getCurrentOccupancy() + 1);
-        if (room.getCurrentOccupancy() + room.getReservedOccupancy() >= room.getCapacity()) {
-            room.setStatus(RoomStatus.FULL);
-        } else {
-            room.setStatus(RoomStatus.AVAILABLE);
-        }
+        room.setStatus(room.getCurrentOccupancy() + room.getReservedOccupancy() >= room.getCapacity()
+                ? RoomStatus.FULL
+                : RoomStatus.AVAILABLE);
         roomRepository.save(room);
 
         return roomAssignmentMapper.toResponse(roomAssignmentRepository.save(assignment));
@@ -122,8 +143,7 @@ public class RoomAssignmentService {
         validatePage(page, size);
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
-        return roomAssignmentRepository.findAllByDormApplicationStudentId(
-                        student.getId(), pageable(page, size))
+        return roomAssignmentRepository.findAllByStudent_Id(student.getId(), pageable(page, size))
                 .map(roomAssignmentMapper::toResponse);
     }
 
@@ -142,13 +162,13 @@ public class RoomAssignmentService {
     public RoomAssignmentResponse getMyAssignment(Long userId, Long assignmentId) {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
-        return roomAssignmentRepository.findByIdAndDormApplicationStudentId(assignmentId, student.getId())
+        return roomAssignmentRepository.findByAssignmentIdAndStudent_Id(assignmentId, student.getId())
                 .map(roomAssignmentMapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
     }
 
     public RoomAssignmentResponse getById(Long assignmentId) {
-        return roomAssignmentRepository.findById(assignmentId)
+        return roomAssignmentRepository.findByAssignmentId(assignmentId)
                 .map(roomAssignmentMapper::toResponse)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
     }

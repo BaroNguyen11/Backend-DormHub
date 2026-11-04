@@ -48,6 +48,10 @@ public class DormApplication {
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "processed_by")
+    private User processedBy;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
