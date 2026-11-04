@@ -2,9 +2,12 @@ package com.dormhub.service;
 
 import com.dormhub.dto.response.RoomAssignmentResponse;
 import com.dormhub.entity.Contract;
+import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -12,6 +15,7 @@ import com.dormhub.mapper.RoomAssignmentMapper;
 import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
+import com.dormhub.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import org.springframework.stereotype.Service;
@@ -24,16 +28,22 @@ public class CheckInOutService {
     private final ContractRepository contractRepository;
     private final InvoiceRepository invoiceRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
+    private final RoomRepository roomRepository;
     private final RoomAssignmentMapper roomAssignmentMapper;
+    private final NotificationService notificationService;
 
     public CheckInOutService(ContractRepository contractRepository,
                              InvoiceRepository invoiceRepository,
                              RoomAssignmentRepository roomAssignmentRepository,
-                             RoomAssignmentMapper roomAssignmentMapper) {
+                             RoomRepository roomRepository,
+                             RoomAssignmentMapper roomAssignmentMapper,
+                             NotificationService notificationService) {
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
+        this.roomRepository = roomRepository;
         this.roomAssignmentMapper = roomAssignmentMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -52,6 +62,18 @@ public class CheckInOutService {
 
         assignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         assignment.setCheckInAt(LocalDateTime.now(BUSINESS_ZONE));
+        
+        // Send notification after check-in success
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.GENERAL,
+                "Check-in thành công",
+                String.format("Bạn đã check-in thành công cho hợp đồng #%d", contractId),
+                contractId,
+                contract.getStudent().getUser().getId()
+            );
+        }
+        
         return roomAssignmentMapper.toResponse(assignment);
     }
 
@@ -74,6 +96,22 @@ public class CheckInOutService {
             throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
         }
 
+        Room room = roomRepository.findByIdForUpdate(assignment.getRoom().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        if (room.getCurrentOccupancy() <= 0) {
+            throw new AppException(ErrorCode.DATA_CONFLICT,
+                    "Số người đang ở của phòng không khớp với phân phòng");
+        }
+        room.setCurrentOccupancy(room.getCurrentOccupancy() - 1);
+        long pendingHolds = contractRepository.countByRoom_IdAndStatusIn(
+                room.getId(), java.util.List.of(ContractStatus.PENDING));
+        if (room.getStatus() != RoomStatus.MAINTENANCE) {
+            room.setStatus(room.getCurrentOccupancy() + pendingHolds >= room.getCapacity()
+                    ? (pendingHolds > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
+                    : RoomStatus.AVAILABLE);
+        }
+        roomRepository.save(room);
+
         LocalDateTime checkOutAt = LocalDateTime.now(BUSINESS_ZONE);
         assignment.setStatus(RoomAssignmentStatus.CHECKED_OUT);
         assignment.setCheckOutAt(checkOutAt);
@@ -83,6 +121,18 @@ public class CheckInOutService {
                     ? ContractStatus.EXPIRED
                     : ContractStatus.TERMINATED);
         }
+        
+        // Send notification after check-out success
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            notificationService.sendNotification(
+                NotificationType.CHECKOUT_CONFIRMED,
+                "Check-out thành công",
+                String.format("Bạn đã check-out thành công cho hợp đồng #%d", contractId),
+                contractId,
+                contract.getStudent().getUser().getId()
+            );
+        }
+        
         return roomAssignmentMapper.toResponse(assignment);
     }
 

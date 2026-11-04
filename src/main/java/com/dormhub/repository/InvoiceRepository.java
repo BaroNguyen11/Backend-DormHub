@@ -4,6 +4,7 @@ import com.dormhub.entity.Invoice;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
 import jakarta.persistence.LockModeType;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -31,6 +32,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     Optional<Invoice> findByContract_ContractIdAndInvoiceType(Long contractId, InvoiceType invoiceType);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select invoice from Invoice invoice where invoice.contract.contractId = :contractId "
+            + "and invoice.invoiceType = :invoiceType")
+    Optional<Invoice> findByContract_ContractIdAndInvoiceTypeForUpdate(
+            @Param("contractId") Long contractId,
+            @Param("invoiceType") InvoiceType invoiceType);
+
     List<Invoice> findAllByContract_ContractIdInAndInvoiceType(
             List<Long> contractIds, InvoiceType invoiceType);
 
@@ -40,4 +48,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
     Page<Invoice> findByBillingMonth(YearMonth billingMonth, Pageable pageable);
+    
+    @EntityGraph(attributePaths = {"contract", "contract.student", "contract.student.user"})
+    List<Invoice> findByStatusAndDueDateBetween(InvoiceStatus status, LocalDateTime start, LocalDateTime end);
 }

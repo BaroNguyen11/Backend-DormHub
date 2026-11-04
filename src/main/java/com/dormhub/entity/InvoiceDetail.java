@@ -12,8 +12,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -28,7 +26,7 @@ public class InvoiceDetail {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
+    @Column(name = "detail_id")
     private Long detailId;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
@@ -36,7 +34,6 @@ public class InvoiceDetail {
     private Invoice invoice;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "item_type", nullable = false, length = 32)
     private InvoiceItemType itemType;
 

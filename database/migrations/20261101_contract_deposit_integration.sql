@@ -67,6 +67,29 @@ ALTER TABLE public.contracts
     ALTER COLUMN start_date TYPE TIMESTAMP WITHOUT TIME ZONE USING start_date::timestamp,
     ALTER COLUMN end_date TYPE TIMESTAMP WITHOUT TIME ZONE USING end_date::timestamp;
 
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM public.contracts
+               WHERE student_id IS NULL OR room_id IS NULL OR start_date IS NULL OR end_date IS NULL
+                  OR monthly_rent IS NULL OR status IS NULL OR deposit_status IS NULL
+                  OR created_at IS NULL OR updated_at IS NULL) THEN
+        RAISE EXCEPTION 'Cannot align contracts with the Contract entity: required fields contain NULL values';
+    END IF;
+END $$;
+
+ALTER TABLE public.contracts
+    ALTER COLUMN student_id SET NOT NULL,
+    ALTER COLUMN room_id SET NOT NULL,
+    ALTER COLUMN start_date SET NOT NULL,
+    ALTER COLUMN end_date SET NOT NULL,
+    ALTER COLUMN monthly_rent TYPE NUMERIC(38, 0) USING monthly_rent::numeric(38, 0),
+    ALTER COLUMN monthly_rent SET NOT NULL,
+    ALTER COLUMN deposit_amount TYPE NUMERIC(38, 0) USING deposit_amount::numeric(38, 0),
+    ALTER COLUMN status SET NOT NULL,
+    ALTER COLUMN deposit_status SET NOT NULL,
+    ALTER COLUMN created_at SET NOT NULL,
+    ALTER COLUMN updated_at SET NOT NULL;
+
 ALTER TABLE public.rooms
     ADD COLUMN IF NOT EXISTS reserved_occupancy INTEGER NOT NULL DEFAULT 0;
 
@@ -117,16 +140,25 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_contract_student_current
 ALTER TABLE public.invoices
     ADD COLUMN IF NOT EXISTS contract_id BIGINT,
     ADD COLUMN IF NOT EXISTS invoice_type VARCHAR(32),
+    ADD COLUMN IF NOT EXISTS deposit_marker SMALLINT,
     ADD COLUMN IF NOT EXISTS total_amount NUMERIC(38, 0);
 
 UPDATE public.invoices
-SET invoice_type = 'UTILITY'
+SET invoice_type = CASE
+    WHEN deposit_marker::text IN ('1', 'true', 't') THEN 'DEPOSIT'
+    ELSE 'UTILITY'
+END
 WHERE invoice_type IS NULL;
 
 ALTER TABLE public.invoices
     ALTER COLUMN invoice_type TYPE VARCHAR(32) USING invoice_type::text,
     ALTER COLUMN invoice_type SET DEFAULT 'UTILITY',
     ALTER COLUMN invoice_type SET NOT NULL,
+    ALTER COLUMN deposit_marker TYPE SMALLINT USING CASE
+        WHEN deposit_marker IS NULL THEN NULL
+        WHEN deposit_marker::text IN ('1', 'true', 't') THEN 1
+        ELSE 0
+    END,
     ALTER COLUMN status TYPE VARCHAR(32)
         USING CASE status::text
             WHEN 'PENDING' THEN 'UNPAID'
@@ -134,7 +166,36 @@ ALTER TABLE public.invoices
             ELSE status::text
         END,
     ALTER COLUMN issue_date TYPE TIMESTAMP WITHOUT TIME ZONE USING issue_date::timestamp,
-    ALTER COLUMN due_date TYPE TIMESTAMP WITHOUT TIME ZONE USING due_date::timestamp;
+    ALTER COLUMN due_date TYPE TIMESTAMP WITHOUT TIME ZONE USING due_date::timestamp,
+    ALTER COLUMN billing_month TYPE DATE USING billing_month::date,
+    -- DEPOSIT invoices are tied to a contract and do not represent a billing month.
+    ALTER COLUMN billing_month DROP NOT NULL,
+    ALTER COLUMN room_id DROP NOT NULL;
+
+-- Keep notification persistence compatible with the Notification entity in main.
+DO $$
+BEGIN
+    IF to_regclass('public.notifications') IS NOT NULL
+       AND EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'content')
+       AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                       WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'body') THEN
+        ALTER TABLE public.notifications RENAME COLUMN content TO body;
+    END IF;
+END $$;
+
+ALTER TABLE public.notifications
+    ADD COLUMN IF NOT EXISTS body TEXT,
+    ADD COLUMN IF NOT EXISTS ref_id BIGINT;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = 'public' AND table_name = 'notifications'
+                 AND column_name = 'maintenance_request_id') THEN
+        ALTER TABLE public.notifications ALTER COLUMN maintenance_request_id DROP NOT NULL;
+    END IF;
+END $$;
 
 ALTER TABLE public.invoice_details
     ADD COLUMN IF NOT EXISTS amount NUMERIC(38, 0);
@@ -145,6 +206,47 @@ WHERE amount IS NULL AND quantity IS NOT NULL AND unit_price IS NOT NULL;
 
 ALTER TABLE public.invoice_details
     ALTER COLUMN item_type TYPE VARCHAR(32) USING item_type::text;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM public.invoices invoice
+               WHERE invoice.total_amount IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM public.invoice_details detail
+                                 WHERE detail.invoice_id = invoice.invoice_id
+                                   AND detail.amount IS NOT NULL)) THEN
+        RAISE EXCEPTION 'Cannot infer total_amount for an invoice with no valid detail rows';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.invoice_details
+               WHERE invoice_id IS NULL OR item_type IS NULL OR description IS NULL
+                  OR quantity IS NULL OR unit_price IS NULL OR amount IS NULL) THEN
+        RAISE EXCEPTION 'Cannot align invoice_details with the InvoiceDetail entity: required fields contain NULL values';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.invoices WHERE issue_date IS NULL OR status IS NULL) THEN
+        RAISE EXCEPTION 'Cannot align invoices with the Invoice entity: issue_date or status contains NULL values';
+    END IF;
+END $$;
+
+UPDATE public.invoices invoice
+SET total_amount = (
+    SELECT SUM(detail.amount)
+    FROM public.invoice_details detail
+    WHERE detail.invoice_id = invoice.invoice_id
+)
+WHERE invoice.total_amount IS NULL;
+
+ALTER TABLE public.invoices
+    ALTER COLUMN total_amount TYPE NUMERIC(38, 0) USING total_amount::numeric(38, 0),
+    ALTER COLUMN total_amount SET NOT NULL,
+    ALTER COLUMN issue_date SET NOT NULL,
+    ALTER COLUMN status SET NOT NULL;
+
+ALTER TABLE public.invoice_details
+    ALTER COLUMN item_type SET NOT NULL,
+    ALTER COLUMN description SET NOT NULL,
+    ALTER COLUMN quantity SET NOT NULL,
+    ALTER COLUMN unit_price SET NOT NULL,
+    ALTER COLUMN amount TYPE NUMERIC(38, 0) USING amount::numeric(38, 0),
+    ALTER COLUMN amount SET NOT NULL;
 
 DO $$
 BEGIN
@@ -208,6 +310,23 @@ WHERE assignment.dorm_application_id = application.id
 
 ALTER TABLE public.room_assignments
     ALTER COLUMN status TYPE VARCHAR(20) USING status::text;
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM public.room_assignments
+               WHERE student_id IS NULL OR contract_id IS NULL OR room_id IS NULL
+                  OR assigned_by IS NULL OR assigned_at IS NULL OR status IS NULL) THEN
+        RAISE EXCEPTION 'Cannot align room_assignments with the RoomAssignment entity: required fields contain NULL values';
+    END IF;
+END $$;
+
+ALTER TABLE public.room_assignments
+    ALTER COLUMN student_id SET NOT NULL,
+    ALTER COLUMN contract_id SET NOT NULL,
+    ALTER COLUMN room_id SET NOT NULL,
+    ALTER COLUMN assigned_by SET NOT NULL,
+    ALTER COLUMN assigned_at SET NOT NULL,
+    ALTER COLUMN status SET NOT NULL;
 
 DO $$
 BEGIN

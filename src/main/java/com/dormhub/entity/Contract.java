@@ -80,15 +80,6 @@ public class Contract {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    public void updatePending(LocalDateTime startDate, LocalDateTime endDate,
-                              BigDecimal monthlyRent, BigDecimal depositAmount, String description) {
-        this.startDate = startDate;
-        this.endDate = endDate;
-        this.monthlyRent = monthlyRent;
-        this.depositAmount = depositAmount;
-        this.description = description;
-    }
-
     public void cancelPending() {
         this.status = ContractStatus.CANCELLED;
     }

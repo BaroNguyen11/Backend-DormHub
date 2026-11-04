@@ -3,14 +3,14 @@ package com.dormhub.service;
 import com.dormhub.dto.request.BuildingRequest;
 import com.dormhub.dto.response.BuildingResponse;
 import com.dormhub.entity.Building;
+import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.Gender;
+import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.BuildingMapper;
-import com.dormhub.entity.enums.DormApplicationStatus;
-import com.dormhub.entity.enums.RoomAssignmentStatus;
-import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.BuildingRepository;
-import com.dormhub.repository.DormApplicationRepository;
+import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,65 +23,87 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class BuildingService {
 
-    private static final List<RoomAssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
-            List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN);
+    private static final List<ContractStatus> CURRENT_CONTRACT_STATUSES =
+            List.of(ContractStatus.PENDING, ContractStatus.ACTIVE);
 
     private final BuildingRepository buildingRepository;
     private final RoomRepository roomRepository;
-    private final RoomAssignmentRepository roomAssignmentRepository;
-    private final DormApplicationRepository dormApplicationRepository;
+    private final ContractRepository contractRepository;
     private final BuildingMapper buildingMapper;
 
-    public List<BuildingResponse> getAll() {
-        return buildingRepository.findAll().stream()
-                .map(buildingMapper::toResponse)
-                .toList();
+    public List<BuildingResponse> getAllBuildings() {
+        return buildingRepository.findAll().stream().map(this::toResponseWithStats).toList();
     }
 
-    public BuildingResponse getById(Long id) {
-        return buildingMapper.toResponse(findBuilding(id));
-    }
-
-    @Transactional
-    public BuildingResponse create(BuildingRequest request) {
-        Building building = new Building();
-        apply(building, request);
-        return buildingMapper.toResponse(buildingRepository.save(building));
+    public BuildingResponse getBuildingById(Long id) {
+        return toResponseWithStats(findBuilding(id));
     }
 
     @Transactional
-    public BuildingResponse update(Long id, BuildingRequest request) {
+    public BuildingResponse createBuilding(BuildingRequest request) {
+        validateGender(request.getGenderRestriction());
+        String code = request.getBuildingCode().trim();
+        if (buildingRepository.existsByBuildingCode(code)) {
+            throw new AppException(ErrorCode.BUILDING_CODE_EXISTS);
+        }
+        Building building = buildingMapper.toEntity(request);
+        building.setBuildingCode(code);
+        building.setName(request.getName().trim());
+        return toResponseWithStats(buildingRepository.save(building));
+    }
+
+    @Transactional
+    public BuildingResponse updateBuilding(Long id, BuildingRequest request) {
+        validateGender(request.getGenderRestriction());
         Building building = buildingRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
-        if (building.getGenderPolicy() != request.getGenderPolicy()
-                && (roomAssignmentRepository.existsByRoom_Building_IdAndStatusIn(
-                            id, ACTIVE_ASSIGNMENT_STATUSES)
-                    || dormApplicationRepository.existsByRequestedRoomBuildingIdAndStatusIn(
-                            id, List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED)))) {
-            throw new AppException(ErrorCode.BUILDING_GENDER_POLICY_IN_USE);
+        String code = request.getBuildingCode().trim();
+        if (!building.getBuildingCode().equals(code) && buildingRepository.existsByBuildingCode(code)) {
+            throw new AppException(ErrorCode.BUILDING_CODE_EXISTS);
         }
-        apply(building, request);
-        return buildingMapper.toResponse(buildingRepository.save(building));
+
+        Gender currentGender = building.getGenderRestriction();
+        Gender requestedGender = request.getGenderRestriction();
+        if (currentGender != requestedGender
+                && contractRepository.existsCurrentContractWithDifferentGender(
+                        id, CURRENT_CONTRACT_STATUSES, requestedGender)
+                && !request.isConfirmGenderPolicyChange()) {
+            throw new AppException(ErrorCode.BUILDING_GENDER_POLICY_CONFIRMATION_REQUIRED);
+        }
+
+        building.setBuildingCode(code);
+        building.setName(request.getName().trim());
+        building.setAddress(request.getAddress());
+        building.setTotalFloors(request.getTotalFloors());
+        building.setGenderRestriction(requestedGender);
+        building.setDescription(request.getDescription());
+        return toResponseWithStats(buildingRepository.save(building));
     }
 
     @Transactional
-    public void delete(Long id) {
+    public void deleteBuilding(Long id) {
         Building building = findBuilding(id);
-        if (roomRepository.existsByBuildingId(id)) {
+        if (roomRepository.countByBuilding_Id(id) > 0) {
             throw new AppException(ErrorCode.BUILDING_HAS_ROOMS);
         }
         buildingRepository.delete(building);
     }
 
-    private void apply(Building building, BuildingRequest request) {
-        building.setBuildingName(request.getBuildingName().trim());
-        building.setAddress(request.getAddress());
-        building.setGenderPolicy(request.getGenderPolicy());
-        building.setDescription(request.getDescription());
-    }
-
     private Building findBuilding(Long id) {
         return buildingRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.BUILDING_NOT_FOUND));
+    }
+
+    private void validateGender(Gender gender) {
+        if (gender != Gender.MALE && gender != Gender.FEMALE) {
+            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
+        }
+    }
+
+    private BuildingResponse toResponseWithStats(Building building) {
+        long totalRooms = roomRepository.countByBuilding_Id(building.getId());
+        long availableRooms = roomRepository.countByBuilding_IdAndStatus(
+                building.getId(), RoomStatus.AVAILABLE);
+        return buildingMapper.toResponse(building, totalRooms, availableRooms);
     }
 }

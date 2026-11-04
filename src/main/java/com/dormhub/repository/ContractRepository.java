@@ -2,6 +2,7 @@ package com.dormhub.repository;
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.Gender;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -10,14 +11,23 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
-
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
+
+    @Query("select case when count(contract) > 0 then true else false end "
+            + "from Contract contract "
+            + "where contract.room.building.id = :buildingId "
+            + "and contract.status in :statuses "
+            + "and (contract.student.gender is null or contract.student.gender <> :gender)")
+    boolean existsCurrentContractWithDifferentGender(
+            @Param("buildingId") Long buildingId,
+            @Param("statuses") Collection<ContractStatus> statuses,
+            @Param("gender") Gender gender);
 
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
@@ -33,4 +43,20 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select contract from Contract contract where contract.contractId = :contractId")
     Optional<Contract> findByContractIdForUpdate(@Param("contractId") Long contractId);
+    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
+
+    /**
+     * Find active contract for a room in a specific billing month.
+     * A contract is active if its date range includes the billing month.
+     */
+    @Query("SELECT c FROM Contract c " +
+           "WHERE c.room.id = :roomId " +
+           "AND c.status = 'ACTIVE' " +
+           "AND :billingMonth BETWEEN " +
+           "FUNCTION('TO_CHAR', c.startDate, 'YYYY-MM') " +
+           "AND FUNCTION('TO_CHAR', c.endDate, 'YYYY-MM')")
+    Optional<Contract> findActiveContractByRoomAndMonth(
+        @Param("roomId") Long roomId,
+        @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
+    );
 }

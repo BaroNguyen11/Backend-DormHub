@@ -24,7 +24,7 @@ public class DormApplicationMapper {
                 room == null ? null : room.getId(),
                 room == null ? null : room.getRoomNumber(),
                 room == null ? null : room.getBuilding().getId(),
-                room == null ? null : room.getBuilding().getBuildingName(),
+                room == null ? null : room.getBuilding().getName(),
                 application.getRequestDate(),
                 application.getStatus(),
                 application.getNote(),

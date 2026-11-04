@@ -10,8 +10,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, Long> {
 
@@ -40,9 +38,6 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
     Optional<RoomAssignment> findByAssignmentId(Long assignmentId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select assignment from RoomAssignment assignment "
-            + "where assignment.contract.contractId = :contractId "
-            + "order by assignment.assignmentId desc")
     Optional<RoomAssignment> findFirstByContract_ContractIdOrderByAssignmentIdDesc(
-            @Param("contractId") Long contractId);
+            Long contractId);
 }
