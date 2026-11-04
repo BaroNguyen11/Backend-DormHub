@@ -1,21 +1,13 @@
-/*
- * @ (#) MaintenanceRequest .java     1.0     10/27/2026
- * Copyright (c) 2026 IUH.All Rights Reserved.
- */
 package com.dormhub.entity;
 
+import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
+import com.dormhub.entity.enums.MaintenanceType;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
 
-/*
- *@description: this is a class to test the MaintenanceRequest class
- *@author: Bao Nguyen
- *@Date: 10/27/2026
- *@version:      1.0
- */
 @Entity
 @Table(name = "maintenance_requests")
 @Getter
@@ -24,20 +16,39 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class MaintenanceRequest {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false, length = 150)
     private String title;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String description;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "maintenance_status")
+    @Column(name = "maintenance_status", nullable = false, length = 20)
     private MaintenanceStatus maintenanceStatus;
 
-    @Column(name = "created_at")
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private MaintenancePriority priority; // Mức độ ưu tiên
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private MaintenanceType type; // Loại thiết bị hỏng
+
+    @Column(name = "image_url", length = 500)
+    private String imageUrl; // Ảnh chụp minh chứng sự cố
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason; // Lý do từ chối nếu status là REJECTED
+
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
     @Column(name = "resolved_at")
@@ -70,5 +81,4 @@ public class MaintenanceRequest {
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
     }
-
 }

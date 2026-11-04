@@ -1,76 +1,103 @@
 package com.dormhub.entity;
 
 import com.dormhub.entity.enums.ContractStatus;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import com.dormhub.entity.enums.DepositStatus;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "contracts")
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
 public class Contract {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id")
+    @Column(name = "contract_id")
     private Long contractId;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "dorm_application_id", unique = true)
-    private DormApplication dormApplication;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "student_id", nullable = false)
-    private Student student;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "room_id")
+    @JoinColumn(name = "room_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_contracts_room"))
     private Room room;
 
-    @Column(name = "start_date")
-    private LocalDate startDate;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "student_id", nullable = false,
+            foreignKey = @ForeignKey(name = "fk_contracts_student"))
+    private Student student;
 
-    @Column(name = "end_date")
-    private LocalDate endDate;
+    @Column(name = "start_date", nullable = false)
+    private LocalDateTime startDate;
 
-    @Column(name = "monthly_rent", precision = 38, scale = 0)
+    @Column(name = "end_date", nullable = false)
+    private LocalDateTime endDate;
+
+    @Column(name = "monthly_rent", nullable = false, precision = 38, scale = 0)
     private BigDecimal monthlyRent;
 
     @Column(name = "deposit_amount", precision = 38, scale = 0)
     private BigDecimal depositAmount;
 
     @Enumerated(EnumType.STRING)
-    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
-    @Column(name = "status", columnDefinition = "contract_status")
+    @Column(name = "deposit_status", nullable = false, length = 16)
+    private DepositStatus depositStatus = DepositStatus.UNPAID;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 32)
     private ContractStatus status;
 
-    @Column(name = "description", columnDefinition = "text")
+    @Column(name = "description", length = 1000)
     private String description;
 
-    @Column(name = "created_at", updatable = false)
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public void updatePending(LocalDateTime startDate, LocalDateTime endDate,
+                              BigDecimal monthlyRent, BigDecimal depositAmount, String description) {
+        this.startDate = startDate;
+        this.endDate = endDate;
+        this.monthlyRent = monthlyRent;
+        this.depositAmount = depositAmount;
+        this.description = description;
+    }
+
+    public void cancelPending() {
+        this.status = ContractStatus.CANCELLED;
+    }
 
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
-        updatedAt = now;
+        this.createdAt = now;
+        this.updatedAt = now;
     }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 }

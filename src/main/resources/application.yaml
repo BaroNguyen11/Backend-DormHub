@@ -2,6 +2,11 @@ spring:
   config:
     import: optional:file:.env[.properties]
 
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -12,8 +17,9 @@ spring:
       minimum-idle: 1
 
   jpa:
+    defer-datasource-initialization: true
     hibernate:
-      ddl-auto: ${DDL_AUTO:none}
+      ddl-auto: create
     show-sql: false
     properties:
       hibernate:

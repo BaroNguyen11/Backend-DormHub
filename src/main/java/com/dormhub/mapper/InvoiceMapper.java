@@ -4,8 +4,8 @@ import com.dormhub.dto.response.InvoiceDetailResponse;
 import com.dormhub.dto.response.InvoiceResponse;
 import com.dormhub.dto.response.InvoiceSummaryResponse;
 import com.dormhub.entity.Invoice;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
+import com.dormhub.entity.Contract;
+import com.dormhub.entity.Room;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +15,7 @@ public class InvoiceMapper {
     public InvoiceSummaryResponse toSummary(Invoice invoice, boolean overdue) {
         return new InvoiceSummaryResponse(
                 invoice.getInvoiceId(), invoice.getInvoiceType(), roomId(invoice), contractId(invoice),
-                invoice.getBillingMonth(), asDateTime(invoice.getIssueDate()), asDateTime(invoice.getDueDate()),
+                invoice.getBillingMonth(), invoice.getIssueDate(), invoice.getDueDate(),
                 invoice.getStatus(), overdue, invoice.getTotalAmount());
     }
 
@@ -27,20 +27,20 @@ public class InvoiceMapper {
                 .toList();
         return new InvoiceResponse(
                 invoice.getInvoiceId(), invoice.getInvoiceType(), roomId(invoice), contractId(invoice),
-                invoice.getBillingMonth(), asDateTime(invoice.getIssueDate()), asDateTime(invoice.getDueDate()),
+                invoice.getBillingMonth(), invoice.getIssueDate(), invoice.getDueDate(),
                 invoice.getStatus(), overdue, invoice.getTotalAmount(), details);
     }
 
     private Long roomId(Invoice invoice) {
-        return invoice.getRoom() != null ? invoice.getRoom().getId()
-                : invoice.getContract().getRoom().getId();
+        Room room = invoice.getRoom();
+        if (room != null) {
+            return room.getId();
+        }
+        Contract contract = invoice.getContract();
+        return contract != null && contract.getRoom() != null ? contract.getRoom().getId() : null;
     }
 
     private Long contractId(Invoice invoice) {
         return invoice.getContract() == null ? null : invoice.getContract().getContractId();
-    }
-
-    private LocalDateTime asDateTime(LocalDate date) {
-        return date == null ? null : date.atStartOfDay();
     }
 }
