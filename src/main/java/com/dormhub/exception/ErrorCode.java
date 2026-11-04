@@ -29,6 +29,13 @@ public enum ErrorCode {
 
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
+
+    // Renewal
+    RENEWAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu gia hạn"),
+    RENEWAL_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái không cho phép thao tác gia hạn này"),
+    RENEWAL_ALREADY_PENDING(HttpStatus.CONFLICT, "Hợp đồng đã có yêu cầu gia hạn đang chờ xử lý"),
+    RENEWAL_END_DATE_INVALID(HttpStatus.BAD_REQUEST, "Ngày kết thúc mới phải sau ngày kết thúc hiện tại"),
+
     // OTP
     OTP_INVALID(HttpStatus.BAD_REQUEST, "Mã OTP không chính xác"),
     OTP_EXPIRED(HttpStatus.BAD_REQUEST, "Mã OTP đã hết hạn"),
