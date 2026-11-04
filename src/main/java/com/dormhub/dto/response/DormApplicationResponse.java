@@ -3,6 +3,7 @@ package com.dormhub.dto.response;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 public record DormApplicationResponse(
@@ -21,5 +22,10 @@ public record DormApplicationResponse(
         String reviewNote,
         LocalDateTime processedAt,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt) {
+        LocalDateTime updatedAt,
+        Long contractId,
+        Long depositInvoiceId,
+        LocalDateTime contractStartDate,
+        LocalDateTime contractEndDate,
+        BigDecimal depositAmount) {
 }

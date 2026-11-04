@@ -3,6 +3,7 @@ package com.dormhub.controller;
 import com.dormhub.dto.request.DormApplicationReviewRequest;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.DormApplicationResponse;
+import com.dormhub.entity.User;
 import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.service.DormApplicationService;
 import jakarta.validation.Valid;
@@ -10,6 +11,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -37,10 +39,11 @@ public class ManagerDormApplicationController {
 
     @PatchMapping("/{id}/review")
     public ResponseEntity<ApiResponse<DormApplicationResponse>> review(
+            @AuthenticationPrincipal User reviewer,
             @PathVariable Long id,
             @Valid @RequestBody DormApplicationReviewRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Xử lý đơn đăng ký thành công",
-                dormApplicationService.review(id, request)));
+                dormApplicationService.review(id, request, reviewer.getId())));
     }
 
 }

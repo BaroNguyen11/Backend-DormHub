@@ -29,6 +29,13 @@ public enum ErrorCode {
 
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
+
+    // Renewal
+    RENEWAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu gia hạn"),
+    RENEWAL_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái không cho phép thao tác gia hạn này"),
+    RENEWAL_ALREADY_PENDING(HttpStatus.CONFLICT, "Hợp đồng đã có yêu cầu gia hạn đang chờ xử lý"),
+    RENEWAL_END_DATE_INVALID(HttpStatus.BAD_REQUEST, "Ngày kết thúc mới phải sau ngày kết thúc hiện tại"),
+
     STUDENT_PROFILE_INCOMPLETE(HttpStatus.BAD_REQUEST,
             "Hồ sơ sinh viên cần đủ mã sinh viên, ngày sinh, giới tính và địa chỉ"),
     // Housing
@@ -108,6 +115,15 @@ public enum ErrorCode {
     TRANSFER_ROOM_NOT_AVAILABLE(HttpStatus.CONFLICT, "Phòng đích không còn chỗ hoặc không nhận sinh viên"),
     TRANSFER_SAME_ROOM(HttpStatus.BAD_REQUEST, "Phòng đích phải khác phòng hiện tại"),
     TRANSFER_PRICE_MISMATCH(HttpStatus.CONFLICT, "Chỉ được chuyển sang phòng cùng mức giá"),
+
+    // Checkout
+    CHECKOUT_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu trả phòng"),
+    CHECKOUT_REQUEST_ALREADY_OPEN(HttpStatus.CONFLICT, "Hợp đồng đã có yêu cầu trả phòng đang xử lý"),
+    CHECKOUT_REQUEST_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái yêu cầu trả phòng không cho phép thao tác này"),
+    CHECKOUT_REJECTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "Cần ghi rõ lý do khi từ chối yêu cầu trả phòng"),
+    CHECKOUT_DEPOSIT_ACTION_REQUIRED(HttpStatus.BAD_REQUEST, "Cần chọn hoàn hoặc tịch thu tiền cọc trước khi xác nhận trả phòng"),
+    CHECKOUT_DEPOSIT_ACTION_INVALID(HttpStatus.BAD_REQUEST, "Tiền cọc chỉ được hoàn hoặc tịch thu khi xác nhận trả phòng"),
+    CHECKOUT_DEPOSIT_NOT_HELD(HttpStatus.CONFLICT, "Hợp đồng không có tiền cọc đang được giữ để xử lý"),
 
     // Lỗi không xác định
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Đã xảy ra lỗi hệ thống");

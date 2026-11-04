@@ -12,7 +12,6 @@ import java.util.Optional;
 
 @Repository
 public interface BuildingRepository extends JpaRepository<Building, Long> {
-    Optional<Building> findByBuildingCode(String buildingCode);
     boolean existsByBuildingCode(String buildingCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
