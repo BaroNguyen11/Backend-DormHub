@@ -4,7 +4,7 @@ spring:
 
   sql:
     init:
-      mode: always
+      mode: never
       encoding: UTF-8
 
   datasource:
@@ -19,7 +19,7 @@ spring:
   jpa:
     defer-datasource-initialization: true
     hibernate:
-      ddl-auto: create
+      ddl-auto: update
     show-sql: false
     properties:
       hibernate:
@@ -42,6 +42,16 @@ logging:
     org.hibernate.SQL: DEBUG
 
 dormhub:
+  payment:
+    test-bank-code: ${DORMHUB_PAYMENT_TEST_BANK_CODE:}
+    test-account-number: ${DORMHUB_PAYMENT_TEST_ACCOUNT_NUMBER:}
+    reference-prefix: ${DORMHUB_PAYMENT_REFERENCE_PREFIX:DH}
+    reference-suffix-length: ${DORMHUB_PAYMENT_REFERENCE_SUFFIX_LENGTH:12}
+    reference-character-type: ${DORMHUB_PAYMENT_REFERENCE_CHARACTER_TYPE:ALPHANUMERIC}
+    ttl-minutes: ${DORMHUB_PAYMENT_TTL_MINUTES:15}
+    qr-template: ${DORMHUB_PAYMENT_QR_TEMPLATE:compact}
+  sepay:
+    webhook-secret: ${DORMHUB_SEPAY_WEBHOOK_SECRET:}
   jwt:
     secret: ${DORMHUB_JWT_SECRET}
     access-token-minutes: 15
