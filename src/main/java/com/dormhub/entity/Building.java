@@ -1,62 +1,57 @@
 package com.dormhub.entity;
 
-import com.dormhub.entity.enums.BuildingGenderPolicy;
+import com.dormhub.entity.enums.Gender;
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @Entity
 @Table(name = "buildings")
 @Getter
 @Setter
 @NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Building {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(name = "building_name", nullable = false, length = 100)
-    private String buildingName;
-
+    
+    @Column(nullable = false, unique = true, length = 20)
+    private String buildingCode;
+    
+    @Column(nullable = false, length = 100)
+    private String name;
+    
     @Column(length = 255)
     private String address;
-
-    @Column(columnDefinition = "text")
-    private String description;
-
+    
+    @Column(nullable = false)
+    private Integer totalFloors;
+    
     @Enumerated(EnumType.STRING)
-    @Column(name = "gender_policy", length = 20)
-    private BuildingGenderPolicy genderPolicy;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(length = 20)
+    private Gender genderRestriction;
+    
+    @Column(columnDefinition = "TEXT")
+    private String description;
+    
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
+    
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    @OneToMany(mappedBy = "building", fetch = FetchType.LAZY)
-    private List<Room> rooms = new ArrayList<>();
-
-    public void addRoom(Room room) {
-        rooms.add(room);
-        room.setBuilding(this);
-    }
-
+    
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
-        updatedAt = now;
+        this.createdAt = now;
+        this.updatedAt = now;
     }
-
+    
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 }
