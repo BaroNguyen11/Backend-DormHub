@@ -2,6 +2,7 @@ package com.dormhub.repository;
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.Gender;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -11,12 +12,38 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
-
 import java.util.Collection;
+import java.util.List;
 
 public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
+
+    @Query("select case when count(contract) > 0 then true else false end "
+            + "from Contract contract "
+            + "where contract.room.building.id = :buildingId "
+            + "and contract.status in :statuses "
+            + "and (contract.student.gender is null or contract.student.gender <> :gender)")
+    boolean existsCurrentContractWithDifferentGender(
+            @Param("buildingId") Long buildingId,
+            @Param("statuses") Collection<ContractStatus> statuses,
+            @Param("gender") Gender gender);
+
+    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
+
+    @Query("select contract.room.id as roomId, count(contract.contractId) as holdCount "
+            + "from Contract contract "
+            + "where contract.room.id in :roomIds and contract.status in :statuses "
+            + "group by contract.room.id")
+    List<RoomHoldCountProjection> findRoomHoldCounts(
+            @Param("roomIds") Collection<Long> roomIds,
+            @Param("statuses") Collection<ContractStatus> statuses);
+
+    interface RoomHoldCountProjection {
+        Long getRoomId();
+
+        Long getHoldCount();
+    }
 
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
@@ -24,6 +51,11 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
 
     Page<Contract> findAllByStudent_IdAndStatus(
             Long studentId, ContractStatus status, Pageable pageable);
+
+    Optional<Contract> findByDormApplication_Id(Long dormApplicationId);
+
+    List<Contract> findAllByDormApplication_IdIn(List<Long> dormApplicationIds);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select contract from Contract contract where contract.contractId = :contractId")
     Optional<Contract> findByContractIdForUpdate(@Param("contractId") Long contractId);
@@ -42,4 +74,5 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         @Param("roomId") Long roomId,
         @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
     );
+
 }

@@ -37,6 +37,10 @@ public class Contract {
     @Column(name = "contract_id")
     private Long contractId;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "dorm_application_id", unique = true)
+    private DormApplication dormApplication;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "room_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_contracts_room"))
@@ -75,15 +79,6 @@ public class Contract {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
-
-    public void updatePending(LocalDateTime startDate, LocalDateTime endDate,
-                              BigDecimal monthlyRent, BigDecimal depositAmount, String description) {
-        this.startDate = startDate;
-        this.endDate = endDate;
-        this.monthlyRent = monthlyRent;
-        this.depositAmount = depositAmount;
-        this.description = description;
-    }
 
     public void cancelPending() {
         this.status = ContractStatus.CANCELLED;
