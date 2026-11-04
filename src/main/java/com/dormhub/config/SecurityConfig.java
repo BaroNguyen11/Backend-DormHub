@@ -98,6 +98,8 @@ public class SecurityConfig {
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
                         .requestMatchers("/api/v1/notifications/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/rooms/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/residence-terms/active").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
