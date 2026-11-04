@@ -24,6 +24,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -63,16 +66,22 @@ public class RoomService {
             }
             return predicates;
         };
-        return roomRepository.findAll(specification, pageable).map(this::toResponseWithAvailability);
+        Page<Room> rooms = roomRepository.findAll(specification, pageable);
+        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms.getContent());
+        return rooms.map(room -> toResponseWithAvailability(
+                room, holdsByRoom.getOrDefault(room.getId(), 0)));
     }
 
     public RoomResponse getRoomById(Long id) {
-        return toResponseWithAvailability(findRoom(id));
+        Room room = findRoom(id);
+        return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
     }
 
     public List<RoomResponse> getAvailableRooms() {
-        return roomRepository.findByStatus(RoomStatus.AVAILABLE).stream()
-                .map(this::toResponseWithAvailability)
+        List<Room> rooms = roomRepository.findByStatus(RoomStatus.AVAILABLE);
+        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
+        return rooms.stream()
+                .map(room -> toResponseWithAvailability(room, holdsByRoom.getOrDefault(room.getId(), 0)))
                 .filter(response -> Boolean.TRUE.equals(response.getIsAvailable()))
                 .toList();
     }
@@ -89,7 +98,7 @@ public class RoomService {
         room.setRoomNumber(roomNumber);
         room.setCurrentOccupancy(0);
         room.setStatus(RoomStatus.AVAILABLE);
-        return toResponseWithAvailability(roomRepository.save(room));
+        return toResponseWithAvailability(roomRepository.save(room), 0);
     }
 
     @Transactional
@@ -127,7 +136,7 @@ public class RoomService {
         room.setWaterMeterNumber(request.getWaterMeterNumber());
         room.setDescription(request.getDescription());
         refreshCapacityStatus(room, heldSlots);
-        return toResponseWithAvailability(roomRepository.save(room));
+        return toResponseWithAvailability(roomRepository.save(room), heldSlots);
     }
 
     @Transactional
@@ -151,7 +160,7 @@ public class RoomService {
             throw new AppException(ErrorCode.ROOM_FULL);
         }
         room.setStatus(status);
-        return toResponseWithAvailability(roomRepository.save(room));
+        return toResponseWithAvailability(roomRepository.save(room), heldSlots);
     }
 
     @Transactional
@@ -168,12 +177,23 @@ public class RoomService {
         roomRepository.delete(room);
     }
 
-    private RoomResponse toResponseWithAvailability(Room room) {
+    private RoomResponse toResponseWithAvailability(Room room, int heldSlots) {
         RoomResponse response = roomMapper.toResponse(room);
-        int heldSlots = getPendingContractCount(room.getId());
         boolean hasSpace = room.getCurrentOccupancy() + heldSlots < room.getCapacity();
         response.setIsAvailable(room.getStatus() == RoomStatus.AVAILABLE && hasSpace);
         return response;
+    }
+
+    private Map<Long, Integer> getPendingContractCounts(List<Room> rooms) {
+        if (rooms.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> roomIds = rooms.stream().map(Room::getId).toList();
+        return contractRepository.findRoomHoldCounts(roomIds, CAPACITY_HOLD_STATUSES).stream()
+                .collect(Collectors.toMap(
+                        ContractRepository.RoomHoldCountProjection::getRoomId,
+                        projection -> Math.toIntExact(projection.getHoldCount()),
+                        Integer::sum));
     }
 
     private void refreshCapacityStatus(Room room, int heldSlots) {

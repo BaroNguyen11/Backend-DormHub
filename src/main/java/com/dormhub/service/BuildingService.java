@@ -17,6 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,7 +35,20 @@ public class BuildingService {
     private final BuildingMapper buildingMapper;
 
     public List<BuildingResponse> getAllBuildings() {
-        return buildingRepository.findAll().stream().map(this::toResponseWithStats).toList();
+        Map<Long, RoomRepository.BuildingRoomStatsProjection> statsByBuilding = roomRepository
+                .findBuildingRoomStats(RoomStatus.AVAILABLE).stream()
+                .collect(Collectors.toMap(
+                        RoomRepository.BuildingRoomStatsProjection::getBuildingId,
+                        Function.identity()));
+
+        return buildingRepository.findAll().stream()
+                .map(building -> {
+                    RoomRepository.BuildingRoomStatsProjection stats = statsByBuilding.get(building.getId());
+                    long totalRooms = stats == null ? 0 : stats.getTotalRooms();
+                    long availableRooms = stats == null ? 0 : stats.getAvailableRooms();
+                    return buildingMapper.toResponse(building, totalRooms, availableRooms);
+                })
+                .toList();
     }
 
     public BuildingResponse getBuildingById(Long id) {
@@ -49,7 +65,7 @@ public class BuildingService {
         Building building = buildingMapper.toEntity(request);
         building.setBuildingCode(code);
         building.setName(request.getName().trim());
-        return toResponseWithStats(buildingRepository.save(building));
+        return buildingMapper.toResponse(buildingRepository.save(building), 0L, 0L);
     }
 
     @Transactional
@@ -101,9 +117,9 @@ public class BuildingService {
     }
 
     private BuildingResponse toResponseWithStats(Building building) {
-        long totalRooms = roomRepository.countByBuilding_Id(building.getId());
-        long availableRooms = roomRepository.countByBuilding_IdAndStatus(
+        RoomRepository.BuildingRoomStatsProjection stats = roomRepository.getBuildingRoomStats(
                 building.getId(), RoomStatus.AVAILABLE);
-        return buildingMapper.toResponse(building, totalRooms, availableRooms);
+        return buildingMapper.toResponse(
+                building, stats.getTotalRooms(), stats.getAvailableRooms());
     }
 }
