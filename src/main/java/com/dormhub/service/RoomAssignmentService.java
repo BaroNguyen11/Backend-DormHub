@@ -124,10 +124,8 @@ public class RoomAssignmentService {
         assignment.setStatus(RoomAssignmentStatus.ASSIGNED);
 
         room.setCurrentOccupancy(room.getCurrentOccupancy() + 1);
-        long remainingHolds = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), ROOM_HOLD_STATUSES);
-        room.setStatus(room.getCurrentOccupancy() + remainingHolds >= room.getCapacity()
-                ? (remainingHolds > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
+        room.setStatus(room.getCurrentOccupancy() + otherPendingHolds >= room.getCapacity()
+                ? (otherPendingHolds > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
                 : RoomStatus.AVAILABLE);
         roomRepository.save(room);
         return roomAssignmentMapper.toResponse(roomAssignmentRepository.save(assignment));
