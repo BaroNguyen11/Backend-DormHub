@@ -102,6 +102,13 @@ public enum ErrorCode {
     DEPOSIT_INVALID(HttpStatus.BAD_REQUEST, "Thông tin đặt cọc không hợp lệ"),
     DEPOSIT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái đặt cọc không cho phép thao tác này"),
 
+    // Payment
+    PAYMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thanh toán"),
+    PAYMENT_NOT_SUPPORTED(HttpStatus.NOT_IMPLEMENTED, "Chưa hỗ trợ thanh toán loại hóa đơn này"),
+    PAYMENT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái thanh toán không cho phép thao tác này"),
+    PAYMENT_INVALID_AMOUNT(HttpStatus.BAD_REQUEST, "Số tiền thanh toán không hợp lệ"),
+    PAYMENT_CONFIGURATION_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Cấu hình thanh toán không hợp lệ"),
+
     // Contract
     CONTRACT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hợp đồng"),
     CONTRACT_CONFLICT(HttpStatus.CONFLICT, "Trạng thái hợp đồng không cho phép thao tác này"),
