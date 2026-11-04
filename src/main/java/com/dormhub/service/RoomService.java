@@ -120,7 +120,6 @@ public class RoomService {
         }
         if (!room.getBuilding().getId().equals(building.getId())
                 && (occupiedAndHeld > 0
-                || roomAssignmentRepository.existsByRoom_Id(id))) {
                 || roomAssignmentRepository.existsByRoom_Id(id)
                 || dormApplicationRepository.existsByRequestedRoomId(id))) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
@@ -169,7 +168,6 @@ public class RoomService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         if (room.getCurrentOccupancy() > 0
                 || getPendingContractCount(id) > 0
-                || roomAssignmentRepository.existsByRoom_Id(id)) {
                 || roomAssignmentRepository.existsByRoom_Id(id)
                 || dormApplicationRepository.existsByRequestedRoomId(id)) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
