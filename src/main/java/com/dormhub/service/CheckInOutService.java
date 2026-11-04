@@ -9,6 +9,7 @@ import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
+import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.RoomAssignmentMapper;
@@ -18,6 +19,7 @@ import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -121,6 +123,7 @@ public class CheckInOutService {
                     ? ContractStatus.EXPIRED
                     : ContractStatus.TERMINATED);
         }
+        refreshRoomAvailability(assignment.getRoom().getId());
         
         // Send notification after check-out success
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
@@ -148,5 +151,24 @@ public class CheckInOutService {
         return roomAssignmentRepository
                 .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
+    }
+
+    private void refreshRoomAvailability(Long roomId) {
+        Room room = roomRepository.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        int remainingAssignments = Math.toIntExact(roomAssignmentRepository
+                .countByRoom_IdAndStatusIn(roomId, List.of(RoomAssignmentStatus.CHECKED_IN)));
+        room.setCurrentOccupancy(Math.max(Math.max(room.getCurrentOccupancy() - 1, 0),
+                remainingAssignments));
+
+        if (room.getStatus() == RoomStatus.MAINTENANCE) {
+            return;
+        }
+
+        long heldContracts = contractRepository.countByRoom_IdAndStatusIn(
+                roomId, List.of(ContractStatus.PENDING));
+        room.setStatus(room.getCurrentOccupancy() + heldContracts >= room.getCapacity()
+                ? RoomStatus.RESERVED
+                : RoomStatus.AVAILABLE);
     }
 }
