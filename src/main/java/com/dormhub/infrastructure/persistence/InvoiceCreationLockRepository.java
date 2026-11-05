@@ -1,4 +1,4 @@
-package com.dormhub.repository;
+package com.dormhub.infrastructure.persistence;
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.Room;

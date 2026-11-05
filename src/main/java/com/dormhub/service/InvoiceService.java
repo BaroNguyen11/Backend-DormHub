@@ -20,7 +20,7 @@ import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
 import com.dormhub.repository.ContractRepository;
-import com.dormhub.repository.InvoiceCreationLockRepository;
+import com.dormhub.infrastructure.persistence.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.MeterReadingRepository;
 import java.math.BigDecimal;
