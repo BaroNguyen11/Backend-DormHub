@@ -30,4 +30,8 @@ public interface MaintenanceRepository extends JpaRepository<MaintenanceRequest,
     @Override
     @EntityGraph(attributePaths = {"student", "student.user", "room"})
     Optional<MaintenanceRequest> findById(Long id);
+
+    boolean existsByRoom_IdAndMaintenanceStatusIn(
+            Long roomId,
+            java.util.Collection<com.dormhub.entity.enums.MaintenanceStatus> statuses);
 }

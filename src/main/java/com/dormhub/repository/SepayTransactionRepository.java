@@ -11,5 +11,8 @@ public interface SepayTransactionRepository extends JpaRepository<SepayTransacti
 
     Optional<SepayTransaction> findBySepayTransactionId(Long sepayTransactionId);
 
+    java.util.List<SepayTransaction> findByStatusAndReceivedAtAfter(
+            SepayTransactionStatus status, java.time.Instant receivedAt);
+
     Page<SepayTransaction> findAllByStatus(SepayTransactionStatus status, Pageable pageable);
 }

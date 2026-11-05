@@ -48,6 +48,10 @@ public interface DormApplicationRepository extends JpaRepository<DormApplication
             Long roomId,
             Collection<DormApplicationStatus> statuses);
 
+    long countByRequestedRoomIdAndStatusIn(
+            Long roomId,
+            Collection<DormApplicationStatus> statuses);
+
     boolean existsByRequestedRoomBuildingIdAndStatusIn(
             Long buildingId,
             Collection<DormApplicationStatus> statuses);

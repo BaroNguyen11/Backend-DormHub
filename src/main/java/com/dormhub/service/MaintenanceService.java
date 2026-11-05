@@ -10,6 +10,7 @@ import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
 import com.dormhub.entity.enums.MaintenanceType;
 import com.dormhub.entity.enums.NotificationType;
+import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.MaintenanceMapper;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -166,6 +168,20 @@ public class MaintenanceService {
 
         if (newStatus == MaintenanceStatus.COMPLETED) {
             maintenance.setResolvedAt(LocalDateTime.now());
+        }
+
+        if (newStatus == MaintenanceStatus.COMPLETED || newStatus == MaintenanceStatus.REJECTED) {
+            Room room = maintenance.getRoom();
+            if (room != null && room.getStatus() == RoomStatus.MAINTENANCE) {
+                boolean hasOtherOpenRequests = maintenanceRepository.existsByRoom_IdAndMaintenanceStatusIn(
+                        room.getId(), List.of(MaintenanceStatus.PENDING, MaintenanceStatus.IN_PROGRESS));
+                if (!hasOtherOpenRequests) {
+                    room.setStatus(room.getCurrentOccupancy() >= room.getCapacity()
+                            ? RoomStatus.OCCUPIED
+                            : RoomStatus.AVAILABLE);
+                    roomRepository.save(room);
+                }
+            }
         }
 
         MaintenanceRequest updated = maintenanceRepository.save(maintenance);
