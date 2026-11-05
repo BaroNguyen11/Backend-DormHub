@@ -12,7 +12,7 @@ import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
-import com.dormhub.repository.InvoiceCreationLockRepository;
+import com.dormhub.infrastructure.persistence.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
