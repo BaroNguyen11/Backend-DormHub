@@ -59,7 +59,8 @@ public class PaymentService {
                 .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND));
         requireInvoiceAccess(invoice, currentUser);
         if (invoice.getInvoiceType() != InvoiceType.ROOM_FEE
-                && invoice.getInvoiceType() != InvoiceType.UTILITY) {
+                && invoice.getInvoiceType() != InvoiceType.UTILITY
+                && invoice.getInvoiceType() != InvoiceType.DEPOSIT) {
             throw new AppException(ErrorCode.PAYMENT_NOT_SUPPORTED);
         }
         if (invoice.getStatus() != InvoiceStatus.UNPAID) {
@@ -114,7 +115,8 @@ public class PaymentService {
         Invoice invoice = payment.getInvoice();
         requireInvoiceAccess(invoice, currentUser);
         if (invoice.getInvoiceType() != InvoiceType.ROOM_FEE
-                && invoice.getInvoiceType() != InvoiceType.UTILITY) {
+                && invoice.getInvoiceType() != InvoiceType.UTILITY
+                && invoice.getInvoiceType() != InvoiceType.DEPOSIT) {
             throw new AppException(ErrorCode.PAYMENT_NOT_SUPPORTED);
         }
         return toResponse(payment, invoice, Instant.now());

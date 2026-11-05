@@ -7,6 +7,7 @@ import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
@@ -64,6 +65,8 @@ public class CheckInOutService {
 
         assignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         assignment.setCheckInAt(LocalDateTime.now(BUSINESS_ZONE));
+        roomAssignmentRepository.save(assignment);
+        refreshRoomAvailability(assignment.getRoom().getId());
         
         // Send notification after check-in success
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
@@ -94,34 +97,23 @@ public class CheckInOutService {
                     "Chỉ có thể check-out khi phân phòng đang CHECKED_IN");
         }
         if (invoiceRepository.existsByContract_ContractIdAndStatus(
-                contractId, InvoiceStatus.UNPAID)) {
+                contractId, InvoiceStatus.UNPAID)
+                || (assignment.getRoom() != null && invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
+                        assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY))) {
             throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
         }
-
-        Room room = roomRepository.findByIdForUpdate(assignment.getRoom().getId())
-                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        if (room.getCurrentOccupancy() <= 0) {
-            throw new AppException(ErrorCode.DATA_CONFLICT,
-                    "Số người đang ở của phòng không khớp với phân phòng");
-        }
-        room.setCurrentOccupancy(room.getCurrentOccupancy() - 1);
-        long pendingHolds = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), java.util.List.of(ContractStatus.PENDING));
-        if (room.getStatus() != RoomStatus.MAINTENANCE) {
-            room.setStatus(room.getCurrentOccupancy() + pendingHolds >= room.getCapacity()
-                    ? (pendingHolds > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
-                    : RoomStatus.AVAILABLE);
-        }
-        roomRepository.save(room);
 
         LocalDateTime checkOutAt = LocalDateTime.now(BUSINESS_ZONE);
         assignment.setStatus(RoomAssignmentStatus.CHECKED_OUT);
         assignment.setCheckOutAt(checkOutAt);
+        roomAssignmentRepository.saveAndFlush(assignment);
+
         if (contract.getStatus() != ContractStatus.EXPIRED) {
             contract.setStatus(contract.getEndDate() != null
                     && !contract.getEndDate().isAfter(checkOutAt)
                     ? ContractStatus.EXPIRED
                     : ContractStatus.TERMINATED);
+            contractRepository.save(contract);
         }
         refreshRoomAvailability(assignment.getRoom().getId());
         
@@ -156,19 +148,20 @@ public class CheckInOutService {
     private void refreshRoomAvailability(Long roomId) {
         Room room = roomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        int remainingAssignments = Math.toIntExact(roomAssignmentRepository
-                .countByRoom_IdAndStatusIn(roomId, List.of(RoomAssignmentStatus.CHECKED_IN)));
-        room.setCurrentOccupancy(Math.max(Math.max(room.getCurrentOccupancy() - 1, 0),
-                remainingAssignments));
+        int activeAssignments = Math.toIntExact(roomAssignmentRepository
+                .countByRoom_IdAndStatusIn(roomId, List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN)));
+        room.setCurrentOccupancy(activeAssignments);
 
         if (room.getStatus() == RoomStatus.MAINTENANCE) {
+            roomRepository.save(room);
             return;
         }
 
         long heldContracts = contractRepository.countByRoom_IdAndStatusIn(
                 roomId, List.of(ContractStatus.PENDING));
         room.setStatus(room.getCurrentOccupancy() + heldContracts >= room.getCapacity()
-                ? RoomStatus.RESERVED
+                ? (heldContracts > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
                 : RoomStatus.AVAILABLE);
+        roomRepository.save(room);
     }
 }

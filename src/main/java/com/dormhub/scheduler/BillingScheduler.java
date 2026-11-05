@@ -1,11 +1,13 @@
 package com.dormhub.scheduler;
 
+import com.dormhub.repository.DistributedLockRepository;
 import com.dormhub.service.BillingBatchService;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.ReentrantLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.availability.AvailabilityChangeEvent;
 import org.springframework.boot.availability.ReadinessState;
 import org.springframework.context.event.EventListener;
@@ -16,16 +18,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class BillingScheduler {
 
+    private static final Logger log = LoggerFactory.getLogger(BillingScheduler.class);
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final long BILLING_LOCK_KEY = 824001L;
 
     private final BillingBatchService billingBatchService;
     private final TaskScheduler taskScheduler;
+    private final DistributedLockRepository distributedLockRepository;
     private final AtomicBoolean applicationReady = new AtomicBoolean();
-    private final ReentrantLock executionLock = new ReentrantLock();
 
-    public BillingScheduler(BillingBatchService billingBatchService, TaskScheduler taskScheduler) {
+    public BillingScheduler(BillingBatchService billingBatchService,
+                            TaskScheduler taskScheduler,
+                            DistributedLockRepository distributedLockRepository) {
         this.billingBatchService = billingBatchService;
         this.taskScheduler = taskScheduler;
+        this.distributedLockRepository = distributedLockRepository;
     }
 
     @EventListener
@@ -51,11 +58,14 @@ public class BillingScheduler {
     }
 
     private void runCurrentMonth() {
-        executionLock.lock();
+        if (!distributedLockRepository.tryLock(BILLING_LOCK_KEY)) {
+            log.info("Bỏ qua tiến trình lập hóa đơn tháng: một instance khác đang thực thi.");
+            return;
+        }
         try {
             billingBatchService.generateRoomFees(YearMonth.now(BUSINESS_ZONE));
         } finally {
-            executionLock.unlock();
+            distributedLockRepository.unlock(BILLING_LOCK_KEY);
         }
     }
 }

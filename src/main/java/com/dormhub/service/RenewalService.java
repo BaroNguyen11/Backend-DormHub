@@ -8,6 +8,7 @@ import com.dormhub.entity.RenewalRequest;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RenewalStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -33,17 +34,20 @@ public class RenewalService {
     private final StudentRepository studentRepository;
     private final UserRepository userRepository;
     private final RenewalMapper renewalMapper;
+    private final NotificationService notificationService;
 
     public RenewalService(ContractRepository contractRepository,
                           RenewalRequestRepository renewalRequestRepository,
                           StudentRepository studentRepository,
                           UserRepository userRepository,
-                          RenewalMapper renewalMapper) {
+                          RenewalMapper renewalMapper,
+                          NotificationService notificationService) {
         this.contractRepository = contractRepository;
         this.renewalRequestRepository = renewalRequestRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
         this.renewalMapper = renewalMapper;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -138,6 +142,7 @@ public class RenewalService {
             ensureActiveContract(contract);
             ensureRequestedEndDateIsAfterCurrent(contract, renewalRequest.getRequestedEndDate());
             contract.setEndDate(renewalRequest.getRequestedEndDate());
+            contractRepository.save(contract);
         }
 
         User reviewer = userRepository.findById(reviewerUserId)
@@ -146,8 +151,27 @@ public class RenewalService {
         renewalRequest.setReviewedBy(reviewer);
         renewalRequest.setReviewedAt(LocalDateTime.now());
         renewalRequest.setReviewNote(trimToNull(request.getReviewNote()));
+        RenewalRequest savedRequest = renewalRequestRepository.save(renewalRequest);
 
-        return renewalMapper.toResponse(renewalRequestRepository.save(renewalRequest));
+        if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
+            boolean approved = request.getStatus() == RenewalStatus.APPROVED;
+            String title = approved ? "Yêu cầu gia hạn được duyệt" : "Yêu cầu gia hạn bị từ chối";
+            String message = approved
+                    ? String.format("Hợp đồng #%d đã được gia hạn thành công đến ngày %s.",
+                            contract.getContractId(), renewalRequest.getRequestedEndDate().toLocalDate())
+                    : "Yêu cầu gia hạn hợp đồng #" + contract.getContractId() + " đã bị từ chối.";
+            if (savedRequest.getReviewNote() != null) {
+                message += " Ghi chú: " + savedRequest.getReviewNote();
+            }
+            notificationService.sendNotification(
+                    NotificationType.GENERAL,
+                    title,
+                    message,
+                    contract.getContractId(),
+                    contract.getStudent().getUser().getId());
+        }
+
+        return renewalMapper.toResponse(savedRequest);
     }
 
     private Student getStudentByUserId(Long userId) {

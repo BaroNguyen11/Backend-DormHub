@@ -12,6 +12,8 @@ import com.dormhub.entity.User;
 import com.dormhub.entity.enums.CheckoutRequestStatus;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.DepositStatus;
+import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
@@ -19,6 +21,7 @@ import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.CheckoutMapper;
 import com.dormhub.repository.CheckoutRequestRepository;
 import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.StudentRepository;
 import java.time.LocalDate;
@@ -45,6 +48,7 @@ public class CheckoutService {
     private final ContractRepository contractRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final StudentRepository studentRepository;
+    private final InvoiceRepository invoiceRepository;
     private final CheckInOutService checkInOutService;
     private final CheckoutMapper checkoutMapper;
     private final NotificationService notificationService;
@@ -53,6 +57,7 @@ public class CheckoutService {
                            ContractRepository contractRepository,
                            RoomAssignmentRepository roomAssignmentRepository,
                            StudentRepository studentRepository,
+                           InvoiceRepository invoiceRepository,
                            CheckInOutService checkInOutService,
                            CheckoutMapper checkoutMapper,
                            NotificationService notificationService) {
@@ -60,6 +65,7 @@ public class CheckoutService {
         this.contractRepository = contractRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
         this.studentRepository = studentRepository;
+        this.invoiceRepository = invoiceRepository;
         this.checkInOutService = checkInOutService;
         this.checkoutMapper = checkoutMapper;
         this.notificationService = notificationService;
@@ -153,6 +159,7 @@ public class CheckoutService {
 
         if (request.getStatus() == CheckoutRequestStatus.APPROVED) {
             validateCurrentStayForReview(checkoutRequest);
+            validateNoUnpaidInvoices(checkoutRequest.getContract().getContractId());
         }
 
         checkoutRequest.setStatus(request.getStatus());
@@ -174,6 +181,7 @@ public class CheckoutService {
         }
 
         Long contractId = checkoutRequest.getContract().getContractId();
+        validateNoUnpaidInvoices(contractId);
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
         validateDepositDisposition(contract, request.getDepositDisposition());
@@ -219,6 +227,21 @@ public class CheckoutService {
                 || (contract.getStatus() != ContractStatus.ACTIVE
                 && contract.getStatus() != ContractStatus.EXPIRED)) {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS);
+        }
+    }
+
+    private void validateNoUnpaidInvoices(Long contractId) {
+        if (invoiceRepository.existsByContract_ContractIdAndStatus(contractId, InvoiceStatus.UNPAID)) {
+            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
+        }
+        RoomAssignment assignment = roomAssignmentRepository
+                .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
+                .orElse(null);
+        if (assignment != null && assignment.getRoom() != null) {
+            if (invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
+                    assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
+                throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
+            }
         }
     }
 

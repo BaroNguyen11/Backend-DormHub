@@ -223,7 +223,25 @@ public class RoomTransferService {
         newAssignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         roomAssignmentRepository.save(newAssignment);
 
+        Room currentRoom = roomRepository.findByIdForUpdate(currentAssignment.getRoom().getId())
+                .orElse(currentAssignment.getRoom());
+        currentRoom.setCurrentOccupancy(Math.max(0, currentRoom.getCurrentOccupancy() - 1));
+        if (currentRoom.getStatus() != RoomStatus.MAINTENANCE) {
+            currentRoom.setStatus(RoomStatus.AVAILABLE);
+        }
+        roomRepository.save(currentRoom);
+
+        destinationRoom.setCurrentOccupancy(destinationRoom.getCurrentOccupancy() + 1);
+        if (destinationRoom.getStatus() != RoomStatus.MAINTENANCE) {
+            destinationRoom.setStatus(destinationRoom.getCurrentOccupancy() >= destinationRoom.getCapacity()
+                    ? RoomStatus.OCCUPIED
+                    : RoomStatus.AVAILABLE);
+        }
+        roomRepository.save(destinationRoom);
+
         contract.setRoom(destinationRoom);
+        contract.setMonthlyRent(destinationRoom.getPricePerMonth());
+        contractRepository.save(contract);
         transferRequest.setApprovedRoom(destinationRoom);
     }
 
@@ -239,9 +257,8 @@ public class RoomTransferService {
             throw new AppException(ErrorCode.TRANSFER_ROOM_NOT_AVAILABLE);
         }
 
-        if (contract.getMonthlyRent() == null || destinationRoom.getPricePerMonth() == null
-                || contract.getMonthlyRent().compareTo(destinationRoom.getPricePerMonth()) != 0) {
-            throw new AppException(ErrorCode.TRANSFER_PRICE_MISMATCH);
+        if (destinationRoom.getPricePerMonth() == null || destinationRoom.getPricePerMonth().signum() <= 0) {
+            throw new AppException(ErrorCode.TRANSFER_ROOM_NOT_AVAILABLE, "Phòng chuyển đến chưa có giá hợp lệ");
         }
 
         Gender studentGender = student.getGender();

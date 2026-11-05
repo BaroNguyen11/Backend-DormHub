@@ -26,6 +26,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -151,6 +152,27 @@ public class ContractService {
 
     public ContractResponse getById(Long contractId) {
         return contractMapper.toResponse(findContract(contractId));
+    }
+
+    public Page<ContractResponse> getMyContracts(Long userId, ContractStatus status, Pageable pageable) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        if (status != null) {
+            return contractRepository.findAllByStudent_IdAndStatus(student.getId(), status, pageable)
+                    .map(contractMapper::toResponse);
+        }
+        return contractRepository.findAllByStudent_Id(student.getId(), pageable)
+                .map(contractMapper::toResponse);
+    }
+
+    public ContractResponse getMyContract(Long userId, Long contractId) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        Contract contract = findContract(contractId);
+        if (!Objects.equals(contract.getStudent().getId(), student.getId())) {
+            throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
+        }
+        return contractMapper.toResponse(contract);
     }
 
     public Page<ContractResponse> search(Long studentId, ContractStatus status, Pageable pageable) {

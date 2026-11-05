@@ -237,7 +237,7 @@ public class DormApplicationService {
     }
 
     private Room findAvailableRoom(Long roomId, Student student) {
-        Room room = roomRepository.findById(roomId)
+        Room room = roomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         if (student.getGender() != Gender.MALE && student.getGender() != Gender.FEMALE) {
             throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
@@ -248,9 +248,11 @@ public class DormApplicationService {
         if (room.getBuilding().getGenderRestriction() != student.getGender()) {
             throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
         }
+        long pendingApplications = dormApplicationRepository.countByRequestedRoomIdAndStatusIn(
+                room.getId(), List.of(DormApplicationStatus.PENDING));
         long pendingContracts = contractRepository.countByRoom_IdAndStatusIn(
                 room.getId(), List.of(ContractStatus.PENDING));
-        if (room.getCurrentOccupancy() + pendingContracts >= room.getCapacity()) {
+        if (room.getCurrentOccupancy() + pendingContracts + pendingApplications >= room.getCapacity()) {
             throw new AppException(ErrorCode.ROOM_FULL);
         }
         if (room.getStatus() != RoomStatus.AVAILABLE) {

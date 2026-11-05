@@ -37,12 +37,16 @@ public class SepayWebhookService {
     private final SepayTransactionRepository transactionRepository;
     private final PaymentRepository paymentRepository;
     private final InvoiceRepository invoiceRepository;
+    private final DepositService depositService;
 
     public SepayWebhookService(SepayTransactionRepository transactionRepository,
-                               PaymentRepository paymentRepository, InvoiceRepository invoiceRepository) {
+                               PaymentRepository paymentRepository,
+                               InvoiceRepository invoiceRepository,
+                               DepositService depositService) {
         this.transactionRepository = transactionRepository;
         this.paymentRepository = paymentRepository;
         this.invoiceRepository = invoiceRepository;
+        this.depositService = depositService;
     }
 
     public enum Outcome {
@@ -94,7 +98,9 @@ public class SepayWebhookService {
             return sameTransaction(existing, payload, transactionAt) ? Outcome.DUPLICATE : Outcome.CONFLICT;
         }
         transaction.setPayment(payment);
-        if (invoice.getInvoiceType() != InvoiceType.ROOM_FEE && invoice.getInvoiceType() != InvoiceType.UTILITY) {
+        if (invoice.getInvoiceType() != InvoiceType.ROOM_FEE
+                && invoice.getInvoiceType() != InvoiceType.UTILITY
+                && invoice.getInvoiceType() != InvoiceType.DEPOSIT) {
             return review(transaction, payment, "Invoice type is not supported");
         }
         String gatewayBin = PaymentBankMapping.sepayGatewayBin(payload.getGateway());
@@ -126,7 +132,11 @@ public class SepayWebhookService {
         transaction.setStatus(SepayTransactionStatus.MATCHED);
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setPaidAt(transactionAt);
-        invoice.setStatus(InvoiceStatus.PAID);
+        if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
+            depositService.confirmDepositPaid(invoice.getInvoiceId());
+        } else {
+            invoice.setStatus(InvoiceStatus.PAID);
+        }
         transactionRepository.saveAndFlush(transaction);
         return Outcome.MATCHED;
     }
@@ -140,6 +150,71 @@ public class SepayWebhookService {
         return transactionRepository.findBySepayTransactionId(payload.getId())
                 .map(existing -> sameTransaction(existing, payload, transactionAt) ? Outcome.DUPLICATE : Outcome.CONFLICT)
                 .orElse(Outcome.CONFLICT);
+    }
+
+    @Transactional
+    public Outcome retryReconcile(SepayTransaction transaction) {
+        if (transaction.getStatus() != SepayTransactionStatus.UNMATCHED
+                || transaction.getCode() == null || transaction.getCode().isBlank()) {
+            return transaction.getStatus() == SepayTransactionStatus.MATCHED ? Outcome.MATCHED : Outcome.UNMATCHED;
+        }
+        Payment candidate = paymentRepository.findByPaymentReference(transaction.getCode()).orElse(null);
+        if (candidate == null || candidate.getInvoice() == null) {
+            return Outcome.UNMATCHED;
+        }
+
+        Invoice invoice = invoiceRepository.findByIdForUpdate(candidate.getInvoice().getInvoiceId()).orElse(null);
+        Payment payment = paymentRepository.findByIdForUpdate(candidate.getPaymentId()).orElse(null);
+        if (invoice == null || payment == null || payment.getInvoice() == null
+                || !invoice.getInvoiceId().equals(payment.getInvoice().getInvoiceId())
+                || !transaction.getCode().equals(payment.getPaymentReference())) {
+            return Outcome.UNMATCHED;
+        }
+
+        transaction.setPayment(payment);
+        if (invoice.getInvoiceType() != InvoiceType.ROOM_FEE
+                && invoice.getInvoiceType() != InvoiceType.UTILITY
+                && invoice.getInvoiceType() != InvoiceType.DEPOSIT) {
+            return review(transaction, payment, "Invoice type is not supported");
+        }
+        String gatewayBin = PaymentBankMapping.sepayGatewayBin(transaction.getGateway());
+        String receivingBankBin = PaymentBankMapping.vietQrBankBin(payment.getReceivingBankCode());
+        if (gatewayBin == null || !gatewayBin.equals(receivingBankBin)) {
+            return review(transaction, payment, "Receiving bank cannot be verified");
+        }
+        if (!transaction.getAccountNumber().equals(payment.getReceivingAccountNumber())) {
+            return review(transaction, payment, "Receiving account does not match");
+        }
+        if (payment.getMethod() != PaymentMethod.BANK_TRANSFER
+                || payment.getExpectedAmount() == null || invoice.getTotalAmount() == null
+                || transaction.getTransferAmount().compareTo(payment.getExpectedAmount()) != 0
+                || transaction.getTransferAmount().compareTo(invoice.getTotalAmount()) != 0) {
+            return review(transaction, payment, "Amount or payment method does not match");
+        }
+        if (payment.getStatus() != PaymentStatus.PENDING || invoice.getStatus() != InvoiceStatus.UNPAID) {
+            return review(transaction, payment, "Payment or invoice is no longer payable");
+        }
+        Instant transactionAt = transaction.getTransactionAt();
+        if (payment.getCreatedAt() == null
+                || transactionAt.isBefore(payment.getCreatedAt().truncatedTo(ChronoUnit.SECONDS))) {
+            return review(transaction, payment, "Transfer predates payment creation");
+        }
+        if (payment.getExpiresAt() == null || !payment.getExpiresAt().isAfter(Instant.now())
+                || transactionAt.isAfter(payment.getExpiresAt())) {
+            return review(transaction, payment, "Payment or webhook arrived after expiry");
+        }
+
+        transaction.setStatus(SepayTransactionStatus.MATCHED);
+        transaction.setReviewReason(null);
+        payment.setStatus(PaymentStatus.SUCCESS);
+        payment.setPaidAt(transactionAt);
+        if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
+            depositService.confirmDepositPaid(invoice.getInvoiceId());
+        } else {
+            invoice.setStatus(InvoiceStatus.PAID);
+        }
+        transactionRepository.saveAndFlush(transaction);
+        return Outcome.MATCHED;
     }
 
     public boolean isTransactionIdUniqueViolation(Throwable failure) {
