@@ -86,6 +86,16 @@ public class RoomService {
                 .toList();
     }
 
+    public List<RoomResponse> getRoomsForStudent() {
+        List<Room> rooms = roomRepository.findAllWithBuilding();
+        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
+        return rooms.stream()
+                .sorted((left, right) -> left.getId().compareTo(right.getId()))
+                .map(room -> toResponseWithAvailability(
+                        room, holdsByRoom.getOrDefault(room.getId(), 0)))
+                .toList();
+    }
+
     @Transactional
     public RoomResponse createRoom(RoomRequest request) {
         Building building = findBuilding(request.getBuildingId());

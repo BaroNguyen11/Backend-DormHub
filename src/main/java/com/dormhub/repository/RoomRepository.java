@@ -22,6 +22,12 @@ public interface RoomRepository extends JpaRepository<Room, Long>, JpaSpecificat
 
     @EntityGraph(attributePaths = "building")
     List<Room> findByStatus(RoomStatus status);
+
+    @Query("select room from Room room join fetch room.building")
+    List<Room> findAllWithBuilding();
+
+    @Query("select room from Room room join fetch room.building where room.id in :ids")
+    List<Room> findByIdsWithBuilding(@Param("ids") List<Long> ids);
     Optional<Room> findByBuilding_IdAndRoomNumber(Long buildingId, String roomNumber);
     
     // Count methods

@@ -20,6 +20,13 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(AiSearchUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAiSearchUnavailable(AiSearchUnavailableException ex) {
+        log.error("Semantic room search unavailable", ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("AI_SEARCH_UNAVAILABLE", ex.getMessage()));
+    }
+
     // 1. Lỗi nghiệp vụ do ứng dụng chủ động ném ra
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException ex) {
