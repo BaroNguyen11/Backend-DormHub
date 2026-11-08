@@ -215,13 +215,13 @@ public class SemanticRoomSearchService {
     }
 
     /** Sinh cùng một UUID cho cùng Room ID để reindex có thể chạy lặp an toàn. */
-    private String documentId(Long roomId) {
-        return UUID.nameUUIDFromBytes(("dormhub-room:" + roomId)
+    private String documentId(Long roomId ) {
+        return UUID.nameUUIDFromBytes(("dormhub-room:" + roomId )
                 .getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     /** Ghép các thuộc tính Room và Building thành văn bản tiếng Việt để tạo embedding. */
-    private String describe(Room room) {
+    private String describe(Room room ) {
         Building building = room.getBuilding();
         Map<String, String> fields = new LinkedHashMap<>();
         fields.put("Phòng", room.getRoomNumber());
