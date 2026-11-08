@@ -64,6 +64,9 @@ public class StudentService {
         if (request.getPhone() != null){
             student.getUser().setPhone(request.getPhone());
         }
+        if (request.getCic() != null) {
+            student.setCic(request.getCic());
+        }
 
         studentRepository.save(student);
 

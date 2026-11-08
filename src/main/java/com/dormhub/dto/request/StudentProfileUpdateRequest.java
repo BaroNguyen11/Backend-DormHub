@@ -30,4 +30,7 @@ public class StudentProfileUpdateRequest {
 
     @Pattern(regexp = "^(0|\\+84)[3|5|7|8|9][0-9]{8}$", message = "Số điện thoại không hợp lệ")
     private String phone;
+
+    @Pattern(regexp = "^[0-9]{12}$", message = "Số CCCD phải gồm đúng 12 chữ số")
+    private String cic;
 }

@@ -10,10 +10,8 @@ import com.dormhub.entity.Room;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.DormApplicationStatus;
-import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.InvoiceType;
-import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.DormApplicationMapper;
@@ -44,9 +42,6 @@ import java.util.stream.Collectors;
 public class DormApplicationService {
 
     private static final int MAX_PAGE_SIZE = 100;
-    private static final List<DormApplicationStatus> ACTIVE_STATUSES =
-            List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED);
-
     private final DormApplicationRepository dormApplicationRepository;
     private final ContractRepository contractRepository;
     private final InvoiceRepository invoiceRepository;
@@ -55,6 +50,7 @@ public class DormApplicationService {
     private final UserRepository userRepository;
     private final ContractService contractService;
     private final DormApplicationMapper dormApplicationMapper;
+    private final RoomApplicationAvailabilityService roomAvailabilityService;
 
     @Transactional
     public DormApplicationResponse submit(Long userId, DormApplicationRequest request) {
@@ -65,7 +61,7 @@ public class DormApplicationService {
         if (request.getRoomId() == null) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ROOM_REQUIRED);
         }
-        if (dormApplicationRepository.existsByStudentIdAndStatusIn(student.getId(), ACTIVE_STATUSES)) {
+        if (roomAvailabilityService.hasActiveApplication(student)) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ALREADY_ACTIVE);
         }
         Room selectedRoom = findAvailableRoom(request.getRoomId(), student);
@@ -239,32 +235,16 @@ public class DormApplicationService {
     private Room findAvailableRoom(Long roomId, Student student) {
         Room room = roomRepository.findByIdForUpdate(roomId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        if (student.getGender() != Gender.MALE && student.getGender() != Gender.FEMALE) {
-            throw new AppException(ErrorCode.DORM_APPLICATION_GENDER_UNSUPPORTED);
-        }
-        if (room.getBuilding().getGenderRestriction() == null) {
-            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_REQUIRED);
-        }
-        if (room.getBuilding().getGenderRestriction() != student.getGender()) {
-            throw new AppException(ErrorCode.ROOM_GENDER_POLICY_MISMATCH);
-        }
-        long pendingApplications = dormApplicationRepository.countByRequestedRoomIdAndStatusIn(
-                room.getId(), List.of(DormApplicationStatus.PENDING));
-        long pendingContracts = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), List.of(ContractStatus.PENDING));
-        if (room.getCurrentOccupancy() + pendingContracts + pendingApplications >= room.getCapacity()) {
-            throw new AppException(ErrorCode.ROOM_FULL);
-        }
-        if (room.getStatus() != RoomStatus.AVAILABLE) {
-            throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
-        }
+        roomAvailabilityService.validateRoomForApplication(room, student);
         return room;
     }
 
     private void validateStudentProfile(Student student) {
-        if (!StringUtils.hasText(student.getStudentCode())
-                || student.getDateOfBirth() == null
-                || !StringUtils.hasText(student.getAddress())) {
+        if (student.getCic() == null || !student.getCic().matches("[0-9]{12}")) {
+            throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
+                    "Vui lòng cập nhật số CCCD hợp lệ gồm 12 chữ số trước khi đăng ký phòng");
+        }
+        if (!roomAvailabilityService.hasRequiredProfileFields(student)) {
             throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
                     "Hồ sơ cần có mã sinh viên, ngày sinh và địa chỉ trước khi nộp đơn");
         }

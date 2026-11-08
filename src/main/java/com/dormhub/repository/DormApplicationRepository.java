@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface DormApplicationRepository extends JpaRepository<DormApplication, Long> {
@@ -51,6 +52,19 @@ public interface DormApplicationRepository extends JpaRepository<DormApplication
     long countByRequestedRoomIdAndStatusIn(
             Long roomId,
             Collection<DormApplicationStatus> statuses);
+
+    @Query("select application.requestedRoom.id as roomId, count(application.id) as holdCount "
+            + "from DormApplication application "
+            + "where application.requestedRoom.id in :roomIds and application.status in :statuses "
+            + "group by application.requestedRoom.id")
+    List<RoomHoldCountProjection> findRoomHoldCounts(
+            @Param("roomIds") Collection<Long> roomIds,
+            @Param("statuses") Collection<DormApplicationStatus> statuses);
+
+    interface RoomHoldCountProjection {
+        Long getRoomId();
+        Long getHoldCount();
+    }
 
     boolean existsByRequestedRoomBuildingIdAndStatusIn(
             Long buildingId,

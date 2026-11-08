@@ -276,6 +276,63 @@ public class InvoiceService {
         return invoiceMapper.toResponse(invoice, overdue(invoice));
     }
 
+    @Transactional(readOnly = true)
+    public InvoicePageResponse listByStudent(Long userId, InvoiceStatus status, int page, int size) {
+        if (userId == null || userId <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "A positive userId is required");
+        }
+        if (page < 0 || size < 1 || size > 100) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "page must be nonnegative and size must be between 1 and 100");
+        }
+        
+        // Find all contracts belonging to this student
+        List<Long> contractIds = contractRepository.findAll().stream()
+                .filter(contract -> contract.getStudent() != null 
+                        && contract.getStudent().getUser() != null
+                        && contract.getStudent().getUser().getId().equals(userId))
+                .map(Contract::getContractId)
+                .toList();
+        
+        if (contractIds.isEmpty()) {
+            // Student has no contracts, return empty page
+            return new InvoicePageResponse(List.of(), page, size, 0L, 0);
+        }
+        
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "invoiceId"));
+        Page<Invoice> invoices = status == null
+                ? invoiceRepository.findByContract_ContractIdIn(contractIds, pageable)
+                : invoiceRepository.findByContract_ContractIdInAndStatus(contractIds, status, pageable);
+        
+        List<InvoiceSummaryResponse> content = invoices.getContent().stream()
+                .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
+                .toList();
+        
+        return new InvoicePageResponse(content, page, size, invoices.getTotalElements(), invoices.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public InvoiceResponse getByStudent(Long invoiceId, Long userId) {
+        if (invoiceId == null || invoiceId <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "A positive invoiceId is required");
+        }
+        if (userId == null || userId <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "A positive userId is required");
+        }
+        
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Invoice does not exist"));
+        
+        // Verify ownership: invoice must belong to a contract of this student
+        if (invoice.getContract() == null
+                || invoice.getContract().getStudent() == null
+                || invoice.getContract().getStudent().getUser() == null
+                || !invoice.getContract().getStudent().getUser().getId().equals(userId)) {
+            throw new AppException(ErrorCode.ACCESS_DENIED, "You do not have permission to view this invoice");
+        }
+        
+        return invoiceMapper.toResponse(invoice, overdue(invoice));
+    }
+
     private InvoiceType parseType(String value) {
         try {
             return InvoiceType.valueOf(value.trim().toUpperCase(Locale.ROOT));

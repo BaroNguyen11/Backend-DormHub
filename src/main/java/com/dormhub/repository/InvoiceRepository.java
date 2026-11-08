@@ -53,4 +53,10 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     
     @EntityGraph(attributePaths = {"contract", "contract.student", "contract.student.user"})
     List<Invoice> findByStatusAndDueDateBetween(InvoiceStatus status, LocalDateTime start, LocalDateTime end);
+
+    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
+    Page<Invoice> findByContract_ContractIdIn(List<Long> contractIds, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
+    Page<Invoice> findByContract_ContractIdInAndStatus(List<Long> contractIds, InvoiceStatus status, Pageable pageable);
 }
