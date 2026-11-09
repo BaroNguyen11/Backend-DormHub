@@ -3,21 +3,26 @@ package com.dormhub.service;
 import com.dormhub.dto.request.RenewalCreateRequest;
 import com.dormhub.dto.request.RenewalReviewRequest;
 import com.dormhub.dto.response.RenewalResponse;
+import com.dormhub.entity.CheckoutRequest;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.RenewalRequest;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
+import com.dormhub.entity.enums.CheckoutRequestStatus;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RenewalStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.RenewalMapper;
+import com.dormhub.repository.CheckoutRequestRepository;
 import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.RenewalRequestRepository;
 import com.dormhub.repository.StudentRepository;
 import com.dormhub.repository.UserRepository;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -29,8 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class RenewalService {
 
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final int MAX_PAGE_SIZE = 100;
+
     private final ContractRepository contractRepository;
     private final RenewalRequestRepository renewalRequestRepository;
+    private final CheckoutRequestRepository checkoutRequestRepository;
     private final StudentRepository studentRepository;
     private final UserRepository userRepository;
     private final RenewalMapper renewalMapper;
@@ -38,12 +47,14 @@ public class RenewalService {
 
     public RenewalService(ContractRepository contractRepository,
                           RenewalRequestRepository renewalRequestRepository,
+                          CheckoutRequestRepository checkoutRequestRepository,
                           StudentRepository studentRepository,
                           UserRepository userRepository,
                           RenewalMapper renewalMapper,
                           NotificationService notificationService) {
         this.contractRepository = contractRepository;
         this.renewalRequestRepository = renewalRequestRepository;
+        this.checkoutRequestRepository = checkoutRequestRepository;
         this.studentRepository = studentRepository;
         this.userRepository = userRepository;
         this.renewalMapper = renewalMapper;
@@ -61,6 +72,8 @@ public class RenewalService {
         ensureStudentOwnsContract(contract, student.getId());
         ensureActiveContract(contract);
         ensureRequestedEndDateIsAfterCurrent(contract, request.getRequestedEndDate());
+        // Cross-validation: không cho nộp gia hạn khi còn yêu cầu trả phòng đang mở
+        ensureNoOpenCheckoutRequest(contractId);
 
         if (renewalRequestRepository.existsByContract_ContractIdAndStatus(
                 contractId, RenewalStatus.PENDING)) {
@@ -72,13 +85,14 @@ public class RenewalService {
         renewalRequest.setRequestedEndDate(request.getRequestedEndDate());
         renewalRequest.setReason(trimToNull(request.getReason()));
         renewalRequest.setStatus(RenewalStatus.PENDING);
-        renewalRequest.setRequestedAt(LocalDateTime.now());
+        renewalRequest.setRequestedAt(LocalDateTime.now(BUSINESS_ZONE));
 
         return renewalMapper.toResponse(renewalRequestRepository.save(renewalRequest));
     }
 
     @Transactional(readOnly = true)
     public Page<RenewalResponse> getMyRequests(Long userId, int page, int size) {
+        validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
@@ -109,6 +123,7 @@ public class RenewalService {
     @Transactional(readOnly = true)
     public Page<RenewalResponse> getRequestsForManager(
             RenewalStatus status, int page, int size) {
+        validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
         Page<RenewalRequest> requests = status == null
@@ -141,15 +156,22 @@ public class RenewalService {
         if (request.getStatus() == RenewalStatus.APPROVED) {
             ensureActiveContract(contract);
             ensureRequestedEndDateIsAfterCurrent(contract, renewalRequest.getRequestedEndDate());
+            // Cross-validation (plan Issue #16): chặn gia hạn khi còn yêu cầu trả phòng đang mở
+            ensureNoOpenCheckoutRequest(contract.getContractId());
             contract.setEndDate(renewalRequest.getRequestedEndDate());
             contractRepository.save(contract);
         }
 
         User reviewer = userRepository.findById(reviewerUserId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        // Đồng bộ quy ước: từ chối bắt buộc ghi lý do (như DormApplication/Checkout)
+        if (request.getStatus() == RenewalStatus.REJECTED
+                && (request.getReviewNote() == null || request.getReviewNote().isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần ghi rõ lý do khi từ chối gia hạn");
+        }
         renewalRequest.setStatus(request.getStatus());
         renewalRequest.setReviewedBy(reviewer);
-        renewalRequest.setReviewedAt(LocalDateTime.now());
+        renewalRequest.setReviewedAt(LocalDateTime.now(BUSINESS_ZONE));
         renewalRequest.setReviewNote(trimToNull(request.getReviewNote()));
         RenewalRequest savedRequest = renewalRequestRepository.save(renewalRequest);
 
@@ -164,7 +186,7 @@ public class RenewalService {
                 message += " Ghi chú: " + savedRequest.getReviewNote();
             }
             notificationService.sendNotification(
-                    NotificationType.GENERAL,
+                    NotificationType.RENEWAL_PROCESSED,
                     title,
                     message,
                     contract.getContractId(),
@@ -210,6 +232,23 @@ public class RenewalService {
         if (contract.getStatus() != ContractStatus.ACTIVE) {
             throw new AppException(ErrorCode.RENEWAL_INVALID_STATUS,
                     "Chỉ có thể gia hạn hợp đồng đang ACTIVE");
+        }
+    }
+
+    /** Cross-validation (plan Issue #16): không gia hạn khi còn yêu cầu trả phòng PENDING/APPROVED. */
+    private void ensureNoOpenCheckoutRequest(Long contractId) {
+        boolean hasOpenCheckout = checkoutRequestRepository.existsByContract_ContractIdAndStatusIn(
+                contractId, List.of(CheckoutRequestStatus.PENDING, CheckoutRequestStatus.APPROVED));
+        if (hasOpenCheckout) {
+            throw new AppException(ErrorCode.RENEWAL_INVALID_STATUS,
+                    "Hợp đồng đang có yêu cầu trả phòng chưa hoàn tất — không thể gia hạn");
+        }
+    }
+
+    private void validatePage(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
     }
 

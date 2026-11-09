@@ -61,6 +61,10 @@ public class CheckoutRequest {
     @Column(name = "reason", nullable = false, length = 1000)
     private String reason;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by_user_id", foreignKey = @ForeignKey(name = "fk_checkout_requests_reviewer"))
+    private User reviewedBy;
+
     @Column(name = "processed_at")
     private LocalDateTime processedAt;
 

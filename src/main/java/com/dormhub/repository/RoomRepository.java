@@ -26,6 +26,8 @@ public interface RoomRepository extends JpaRepository<Room, Long>, JpaSpecificat
     
     // Count methods
     long countByBuilding_Id(Long buildingId);
+    
+    long countByStatus(RoomStatus status);
 
     @Query("select room.building.id as buildingId, count(room.id) as totalRooms, "
             + "coalesce(sum(case when room.status = :status then 1 else 0 end), 0) as availableRooms "

@@ -6,6 +6,7 @@ import com.dormhub.dto.request.CheckoutReviewRequest;
 import com.dormhub.dto.response.CheckoutResponse;
 import com.dormhub.entity.CheckoutRequest;
 import com.dormhub.entity.Contract;
+import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
@@ -19,11 +20,8 @@ import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.CheckoutMapper;
-import com.dormhub.repository.CheckoutRequestRepository;
-import com.dormhub.repository.ContractRepository;
-import com.dormhub.repository.InvoiceRepository;
-import com.dormhub.repository.RoomAssignmentRepository;
-import com.dormhub.repository.StudentRepository;
+import com.dormhub.repository.*;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -47,8 +45,10 @@ public class CheckoutService {
     private final CheckoutRequestRepository checkoutRequestRepository;
     private final ContractRepository contractRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
+    private final RoomRepository roomRepository;
     private final StudentRepository studentRepository;
     private final InvoiceRepository invoiceRepository;
+    private final UserRepository userRepository;
     private final CheckInOutService checkInOutService;
     private final CheckoutMapper checkoutMapper;
     private final NotificationService notificationService;
@@ -56,16 +56,20 @@ public class CheckoutService {
     public CheckoutService(CheckoutRequestRepository checkoutRequestRepository,
                            ContractRepository contractRepository,
                            RoomAssignmentRepository roomAssignmentRepository,
+                           RoomRepository roomRepository,
                            StudentRepository studentRepository,
                            InvoiceRepository invoiceRepository,
+                           UserRepository userRepository,
                            CheckInOutService checkInOutService,
                            CheckoutMapper checkoutMapper,
                            NotificationService notificationService) {
         this.checkoutRequestRepository = checkoutRequestRepository;
         this.contractRepository = contractRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
+        this.roomRepository = roomRepository;
         this.studentRepository = studentRepository;
         this.invoiceRepository = invoiceRepository;
+        this.userRepository = userRepository;
         this.checkInOutService = checkInOutService;
         this.checkoutMapper = checkoutMapper;
         this.notificationService = notificationService;
@@ -78,6 +82,10 @@ public class CheckoutService {
         }
 
         Student student = getStudentByUserId(userId);
+        // Khóa biên phân phòng hiện tại (PESSIMISTIC_WRITE): hai request trả
+        // phòng đồng thời sẽ tuần tự hóa trên dòng này, nên lần kiểm tra
+        // "đã có yêu cầu trả phòng mở" bên dưới không thể bị hai luồng vượt
+        // qua cùng lúc (chặn tạo trùng yêu cầu trả phòng).
         RoomAssignment assignment = getCurrentAssignmentForUpdate(student.getId());
         ensureStudentIsCheckedIn(student, assignment);
         Contract contract = assignment.getContract();
@@ -142,7 +150,7 @@ public class CheckoutService {
     }
 
     @Transactional
-    public CheckoutResponse review(Long checkoutRequestId, CheckoutReviewRequest request) {
+    public CheckoutResponse review(Long checkoutRequestId, CheckoutReviewRequest request, Long reviewerUserId) {
         if (request == null || request.getStatus() == null
                 || (request.getStatus() != CheckoutRequestStatus.APPROVED
                 && request.getStatus() != CheckoutRequestStatus.REJECTED)) {
@@ -156,6 +164,8 @@ public class CheckoutService {
 
         CheckoutRequest checkoutRequest = getRequestForUpdate(checkoutRequestId);
         ensurePending(checkoutRequest);
+        User reviewer = userRepository.findById(reviewerUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (request.getStatus() == CheckoutRequestStatus.APPROVED) {
             validateCurrentStayForReview(checkoutRequest);
@@ -165,13 +175,14 @@ public class CheckoutService {
         checkoutRequest.setStatus(request.getStatus());
         checkoutRequest.setProcessedAt(LocalDateTime.now(BUSINESS_ZONE));
         checkoutRequest.setNote(trimToNull(request.getNote()));
+        checkoutRequest.setReviewedBy(reviewer);
         CheckoutRequest savedRequest = checkoutRequestRepository.save(checkoutRequest);
         notifyReviewResult(savedRequest);
         return checkoutMapper.toResponse(savedRequest);
     }
 
     @Transactional
-    public CheckoutResponse complete(Long checkoutRequestId, CheckoutCompleteRequest request) {
+    public CheckoutResponse complete(Long checkoutRequestId, CheckoutCompleteRequest request, Long reviewerUserId) {
         if (request == null) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
@@ -180,20 +191,50 @@ public class CheckoutService {
             throw new AppException(ErrorCode.CHECKOUT_REQUEST_INVALID_STATUS);
         }
 
+        User reviewer = userRepository.findById(reviewerUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
         Long contractId = checkoutRequest.getContract().getContractId();
-        validateNoUnpaidInvoices(contractId);
+
+        // Khóa hợp đồng TRƯỚC khi kiểm tra hóa đơn unpaid (chống TOCTOU):
+        // đường tạo hóa đơn ROOM_FEE cũng phải khóa hợp đồng (lockContract)
+        // trước, nên không thể phát hành hóa đơn mới chen ngang giữa lúc
+        // kiểm tra nợ và lúc chốt trả phòng.
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        validateNoUnpaidInvoicesUnderLock(contract);
         validateDepositDisposition(contract, request.getDepositDisposition());
 
-        checkInOutService.checkOut(contractId);
+        // Quyết định cọc TRƯỚC khi checkOut để đường trả phòng duy nhất:
+        // checkOut từ chối hợp đồng còn cọc HELD (không cho rơi cọc lại trạng thái HELD)
         if (contract.getDepositStatus() == DepositStatus.HELD) {
             contract.setDepositStatus(request.getDepositDisposition());
+            contractRepository.save(contract);
         }
+
+        checkInOutService.checkOut(contractId);
 
         checkoutRequest.setStatus(CheckoutRequestStatus.COMPLETED);
         checkoutRequest.setCheckoutDate(LocalDate.now(BUSINESS_ZONE));
         checkoutRequest.setProcessedAt(LocalDateTime.now(BUSINESS_ZONE));
+        checkoutRequest.setReviewedBy(reviewer);
+        return checkoutMapper.toResponse(checkoutRequestRepository.save(checkoutRequest));
+    }
+
+    /** Manager hủy yêu cầu APPROVED bị kẹt (SV đổi ý) — chỉ khi chưa hoàn tất trả phòng. */
+    @Transactional
+    public CheckoutResponse cancelForManager(Long checkoutRequestId, CheckoutReviewRequest request) {
+        if (request == null || request.getNote() == null || request.getNote().isBlank()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần ghi rõ lý do khi hủy yêu cầu trả phòng");
+        }
+        CheckoutRequest checkoutRequest = getRequestForUpdate(checkoutRequestId);
+        if (checkoutRequest.getStatus() != CheckoutRequestStatus.PENDING
+                && checkoutRequest.getStatus() != CheckoutRequestStatus.APPROVED) {
+            throw new AppException(ErrorCode.CHECKOUT_REQUEST_INVALID_STATUS,
+                    "Chỉ có thể hủy yêu cầu trả phòng đang PENDING hoặc APPROVED");
+        }
+        checkoutRequest.setStatus(CheckoutRequestStatus.CANCELLED);
+        checkoutRequest.setProcessedAt(LocalDateTime.now(BUSINESS_ZONE));
+        checkoutRequest.setNote(trimToNull(request.getNote()));
         return checkoutMapper.toResponse(checkoutRequestRepository.save(checkoutRequest));
     }
 
@@ -230,6 +271,7 @@ public class CheckoutService {
         }
     }
 
+    /** Kiểm tra nợ dạng tra cứu nhanh (dùng cho bước review — bước chốt là complete()). */
     private void validateNoUnpaidInvoices(Long contractId) {
         if (invoiceRepository.existsByContract_ContractIdAndStatus(contractId, InvoiceStatus.UNPAID)) {
             throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
@@ -240,6 +282,30 @@ public class CheckoutService {
         if (assignment != null && assignment.getRoom() != null) {
             if (invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
                     assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
+                throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
+            }
+        }
+    }
+
+    /**
+     * Kiểm tra nợ khi ĐÃ khóa hợp đồng; khóa thêm phòng hiện tại để hóa đơn
+     * UTILITY mới (tự khóa phòng qua lockRoom) không thể chen ngang giữa lúc
+     * kiểm tra và lúc chốt trả phòng (chống TOCTOU). Thứ tự khóa: hợp đồng →
+     * phân phòng → phòng, nhất quán với luồng chuyển phòng.
+     */
+    private void validateNoUnpaidInvoicesUnderLock(Contract contract) {
+        Long contractId = contract.getContractId();
+        if (invoiceRepository.existsByContract_ContractIdAndStatus(contractId, InvoiceStatus.UNPAID)) {
+            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
+        }
+        RoomAssignment assignment = roomAssignmentRepository
+                .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
+                .orElse(null);
+        if (assignment != null && assignment.getRoom() != null) {
+            Room currentRoom = roomRepository.findByIdForUpdate(assignment.getRoom().getId())
+                    .orElse(null);
+            if (currentRoom != null && invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
+                    currentRoom.getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
                 throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
             }
         }
@@ -261,14 +327,17 @@ public class CheckoutService {
         if (checkoutRequest.getNote() != null) {
             body += " Ghi chú: " + checkoutRequest.getNote();
         }
-        notificationService.sendNotification(NotificationType.GENERAL, title, body,
+        notificationService.sendNotification(NotificationType.CHECKOUT_CONFIRMED, title, body,
                 checkoutRequest.getCheckoutRequestId(), studentUser.getId());
     }
 
+    /** Khóa biên (PESSIMISTIC_WRITE) phân phòng CHECKED_IN mới nhất của SV. */
     private RoomAssignment getCurrentAssignmentForUpdate(Long studentId) {
         return roomAssignmentRepository
-                .findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
+                .findAllByStudent_IdAndStatusOrderByAssignmentIdDescForUpdate(
                         studentId, RoomAssignmentStatus.CHECKED_IN)
+                .stream()
+                .findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
     }
 

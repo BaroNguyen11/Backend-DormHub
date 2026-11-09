@@ -56,4 +56,6 @@ public interface DormApplicationRepository extends JpaRepository<DormApplication
             Long buildingId,
             Collection<DormApplicationStatus> statuses);
 
+    long countByStatus(DormApplicationStatus status);
+
 }

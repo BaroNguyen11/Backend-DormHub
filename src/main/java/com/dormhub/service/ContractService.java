@@ -48,6 +48,7 @@ public class ContractService {
     private final ContractMapper contractMapper;
     private final DepositService depositService;
     private final NotificationService notificationService;
+    private final RoomStatusService roomStatusService;
 
     public ContractService(ContractRepository contractRepository,
                            RoomRepository roomRepository,
@@ -55,7 +56,8 @@ public class ContractService {
                            InvoiceRepository invoiceRepository,
                            ContractMapper contractMapper,
                            DepositService depositService,
-                           NotificationService notificationService) {
+                           NotificationService notificationService,
+                           RoomStatusService roomStatusService) {
         this.contractRepository = contractRepository;
         this.roomRepository = roomRepository;
         this.studentRepository = studentRepository;
@@ -63,6 +65,7 @@ public class ContractService {
         this.contractMapper = contractMapper;
         this.depositService = depositService;
         this.notificationService = notificationService;
+        this.roomStatusService = roomStatusService;
     }
 
     @Transactional
@@ -131,11 +134,7 @@ public class ContractService {
         contract.setDescription("Hợp đồng nội trú 12 tháng từ đơn " + application.getId());
         Contract saved = contractRepository.saveAndFlush(contract);
 
-        long heldAfterSave = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), ROOM_HOLD_STATUSES);
-        room.setStatus(room.getCurrentOccupancy() + heldAfterSave >= room.getCapacity()
-                ? RoomStatus.RESERVED
-                : RoomStatus.AVAILABLE);
+        roomStatusService.refreshStatus(room.getId());
         roomRepository.save(room);
 
         depositService.createDepositInvoice(saved.getContractId());
@@ -216,14 +215,7 @@ public class ContractService {
         if (contract.getDormApplication() != null) {
             contract.getDormApplication().setStatus(DormApplicationStatus.CANCELLED);
         }
-        long holdsLeft = contractRepository.countByRoom_IdAndStatusIn(room.getId(), ROOM_HOLD_STATUSES);
-        if (room.getStatus() != RoomStatus.MAINTENANCE) {
-            room.setStatus(room.getCurrentOccupancy() + holdsLeft >= room.getCapacity()
-                    ? RoomStatus.RESERVED
-                    : room.getCurrentOccupancy() >= room.getCapacity()
-                            ? RoomStatus.OCCUPIED
-                            : RoomStatus.AVAILABLE);
-        }
+        roomStatusService.refreshStatus(room.getId());
         roomRepository.save(room);
         return contractMapper.toResponse(contract);
     }

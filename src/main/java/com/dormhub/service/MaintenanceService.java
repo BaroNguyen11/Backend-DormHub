@@ -5,18 +5,24 @@ import com.dormhub.dto.request.MaintenanceStatusUpdateRequest;
 import com.dormhub.dto.response.MaintenanceResponse;
 import com.dormhub.entity.MaintenanceRequest;
 import com.dormhub.entity.Room;
+import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
+import com.dormhub.entity.User;
 import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
 import com.dormhub.entity.enums.MaintenanceType;
 import com.dormhub.entity.enums.NotificationType;
+import com.dormhub.entity.enums.Role;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.MaintenanceMapper;
 import com.dormhub.repository.MaintenanceRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
+import com.dormhub.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -27,30 +33,42 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class MaintenanceService {
 
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
     private final MaintenanceRepository maintenanceRepository;
     private final StudentRepository studentRepository;
     private final RoomRepository roomRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
+    private final UserRepository userRepository;
     private final MaintenanceMapper maintenanceMapper;
     private final NotificationService notificationService;
+    private final RoomStatusService roomStatusService;
 
     private Student getStudentByUserId(Long userId) {
         return studentRepository.findByUserId(userId).orElseThrow(() ->
                 new AppException(ErrorCode.STUDENT_NOT_FOUND));
     }
 
-    // 1. Sinh viên tạo yêu cầu báo hỏng
+    // 1. Sinh viên tạo yêu cầu báo hỏng — roomId tự suy từ phân phòng ACTIVE,
+    //    KHÔNG tin roomId client gửi lên (P0: chặn báo hỏng "hộ" phòng khác)
     @Transactional
     public MaintenanceResponse create(MaintenanceCreateRequest request, Long userId) {
         Student student = getStudentByUserId(userId);
 
-        Room room = roomRepository.findById(request.getRoomId()).orElseThrow(() ->
-                new AppException(ErrorCode.ROOM_NOT_FOUND));
+        RoomAssignment currentAssignment = roomAssignmentRepository
+                .findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
+                        student.getId(), RoomAssignmentStatus.CHECKED_IN)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_IN_ANY_ROOM,
+                        "Bạn hiện không đang ở phòng nào nên không thể tạo báo hỏng"));
+        Room room = currentAssignment.getRoom();
 
         MaintenanceRequest maintenance = MaintenanceRequest.builder()
                 .title(request.getTitle().trim())
@@ -64,12 +82,35 @@ public class MaintenanceService {
                 .build();
 
         MaintenanceRequest saved = maintenanceRepository.save(maintenance);
+        notifyManagersNewRequest(saved);
         return maintenanceMapper.toResponse(saved);
+    }
+
+    private void notifyManagersNewRequest(MaintenanceRequest maintenance) {
+        List<Long> managerIds = userRepository.findAllByRole(Role.MANAGER).stream()
+                .map(User::getId)
+                .toList();
+        if (managerIds.isEmpty()) {
+            return;
+        }
+        notificationService.sendNotification(
+                NotificationType.MAINTENANCE_STATUS_CHANGED,
+                "Báo hỏng mới cần xử lý",
+                String.format("Sinh viên %s (phòng %s) vừa báo hỏng: %s [%s - %s]",
+                        maintenance.getStudent() != null && maintenance.getStudent().getUser() != null
+                                ? maintenance.getStudent().getUser().getFullName() : "#" + maintenance.getId(),
+                        maintenance.getRoom() != null ? maintenance.getRoom().getRoomNumber() : "?",
+                        maintenance.getTitle(),
+                        maintenance.getType(),
+                        maintenance.getPriority()),
+                maintenance.getId(),
+                managerIds);
     }
 
     // 2. Sinh viên xem danh sách yêu cầu của mình (có phân trang)
     @Transactional(readOnly = true)
     public Page<MaintenanceResponse> getMyRequests(Long userId, int page, int size) {
+        validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         return maintenanceRepository.findAllByStudent_Id(student.getId(), pageable)
@@ -96,6 +137,7 @@ public class MaintenanceService {
             int page,
             int size
     ) {
+        validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Specification<MaintenanceRequest> spec = (root, query, cb) -> {
@@ -167,7 +209,7 @@ public class MaintenanceService {
         maintenance.setMaintenanceStatus(newStatus);
 
         if (newStatus == MaintenanceStatus.COMPLETED) {
-            maintenance.setResolvedAt(LocalDateTime.now());
+            maintenance.setResolvedAt(LocalDateTime.now(BUSINESS_ZONE));
         }
 
         if (newStatus == MaintenanceStatus.COMPLETED || newStatus == MaintenanceStatus.REJECTED) {
@@ -176,9 +218,8 @@ public class MaintenanceService {
                 boolean hasOtherOpenRequests = maintenanceRepository.existsByRoom_IdAndMaintenanceStatusIn(
                         room.getId(), List.of(MaintenanceStatus.PENDING, MaintenanceStatus.IN_PROGRESS));
                 if (!hasOtherOpenRequests) {
-                    room.setStatus(room.getCurrentOccupancy() >= room.getCapacity()
-                            ? RoomStatus.OCCUPIED
-                            : RoomStatus.AVAILABLE);
+                    // Cho phép thoát MAINTENANCE và tính lại đúng cả nhánh RESERVED (hợp đồng PENDING giữ chỗ)
+                    roomStatusService.refreshStatus(room, true);
                     roomRepository.save(room);
                 }
             }
@@ -199,5 +240,12 @@ public class MaintenanceService {
                 updated.getStudent().getUser().getId()
         );
         return maintenanceMapper.toResponse(updated);
+    }
+
+    private void validatePage(int page, int size) {
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
+        }
     }
 }

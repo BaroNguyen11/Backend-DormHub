@@ -8,6 +8,7 @@ import com.dormhub.security.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -35,6 +36,9 @@ public class SecurityConfig {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+
+    @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
+    private List<String> allowedOrigins;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -88,9 +92,6 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/test-password").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/generate-hash").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").denyAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
                         .requestMatchers(HttpMethod.POST,
                                         "/api/v1/auth/login",
@@ -101,10 +102,16 @@ public class SecurityConfig {
                                         "/api/v1/auth/logout",
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/rooms/available", "/api/v1/rooms/*").permitAll()
                         .requestMatchers("/api/v1/notifications/**").authenticated()
+                        // Cấp tài khoản do nhà trường provision: Manager tạo tài khoản SV qua register (BR §4.1)
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
+                        // Tạo/xem hóa đơn toàn hệ thống và tra cứu tính tiền: chỉ Manager (P0 - IDOR)
+                        .requestMatchers("/api/v1/invoices/**", "/api/v1/room-monthly-charges/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/contracts", "/api/v1/contracts/**").hasRole("MANAGER")
+                        // Sinh viên chỉ thao tác trong không gian /student/** (hóa đơn riêng có kiểm soát sở hữu)
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
                         )
@@ -116,8 +123,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Cho phép Frontend React Vite (port 5173)
-        configuration.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://localhost:3000"));
+        // Danh sách origin cho phép đọc từ cấu hình (prod không còn hardcode localhost)
+        configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

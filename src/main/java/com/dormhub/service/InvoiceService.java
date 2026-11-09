@@ -125,34 +125,17 @@ public class InvoiceService {
         if (activeContract.isPresent()) {
             invoice.setContract(activeContract.get());
         } else {
-            // Log warning but allow invoice creation without contract
-            // (Room might have previous unpaid invoices even if no current contract)
-            log.warn("No active contract found for room {} in month {}, creating invoice without contract link", 
-                     room.getId(), billingMonthStr);
+            // Hóa đơn UTILITY không có hợp đồng sẽ không thể thanh toán (mất điều kiện
+            // sở hữu của PaymentService) — chặn thay vì tạo hóa đơn "ma"
+            throw new AppException(ErrorCode.BILLING_CONFLICT,
+                    "Không có hợp đồng ACTIVE cho phòng trong kỳ này — không phát hành hóa đơn tiện ích");
         }
 
         attachDetail(invoice, electricity);
         attachDetail(invoice, water);
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
-            
-            // Send notification after invoice creation
-            if (saved.getContract() != null 
-                && saved.getContract().getStudent() != null 
-                && saved.getContract().getStudent().getUser() != null) {
-                String dueDate = saved.getDueDate() != null 
-                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                    : "N/A";
-                notificationService.sendNotification(
-                    NotificationType.INVOICE_CREATED,
-                    "Hóa đơn mới",
-                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
-                        saved.getInvoiceType().name(), dueDate),
-                    saved.getInvoiceId(),
-                    saved.getContract().getStudent().getUser().getId()
-                );
-            }
-            
+            notifyInvoiceCreated(saved);
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw mapIntegrityError(exception);
@@ -186,13 +169,69 @@ public class InvoiceService {
         if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contractId, month)) {
             return false;
         }
-        if (YearMonth.from(contract.getStartDate()).equals(month)) {
-            throw new AppException(ErrorCode.BILLING_CONFLICT,
-                    "First-month ROOM_FEE must be created by Contract/Billing integration");
-        }
         validateRoomFeeContract(contract, month);
         saveRoomFeeInvoice(contract, month);
         return true;
+    }
+
+    /**
+     * P0 - Tiền phòng tháng đầu theo tỷ lệ ngày ở (proration):
+     * thành tiền = monthlyRent × effectiveDays / daysInMonth (HALF_UP, 0 chữ số).
+     * Được gọi khi hợp đồng kích hoạt (cọc hợp lệ) để không mất doanh thu kỳ đầu.
+     * Idempotent: bỏ qua nếu hợp đồng đã có hóa đơn cho tháng bắt đầu.
+     */
+    @Transactional
+    public void createFirstMonthRoomFeeIfAbsent(Contract contract) {
+        if (contract == null || contract.getContractId() == null
+                || contract.getStartDate() == null || contract.getMonthlyRent() == null) {
+            return;
+        }
+        YearMonth startMonth = YearMonth.from(contract.getStartDate());
+        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contract.getContractId(), startMonth)) {
+            return;
+        }
+        LocalDate startDate = contract.getStartDate().toLocalDate();
+        int daysInMonth = startDate.lengthOfMonth();
+        int effectiveDays = daysInMonth - startDate.getDayOfMonth() + 1;
+
+        BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
+        BigDecimal amount = effectiveDays >= daysInMonth
+                ? rent
+                : rent.multiply(BigDecimal.valueOf(effectiveDays))
+                        .divide(BigDecimal.valueOf(daysInMonth), 0, java.math.RoundingMode.HALF_UP);
+
+        Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, startMonth, amount);
+        invoice.setContract(contract);
+        String description = effectiveDays >= daysInMonth
+                ? "Tiền phòng tháng " + startMonth
+                : "Tiền phòng tháng " + startMonth + " (tính theo ngày ở: " + effectiveDays + "/" + daysInMonth + " ngày)";
+        attachDetail(invoice, newDetail(InvoiceItemType.ROOM, description, BigDecimal.ONE, amount, amount));
+        try {
+            Invoice saved = invoiceRepository.saveAndFlush(invoice);
+            notifyInvoiceCreated(saved);
+            log.info("Đã tạo hóa đơn tiền phòng tháng đầu: contractId={}, month={}, amount={}",
+                    contract.getContractId(), startMonth, amount);
+        } catch (DataIntegrityViolationException exception) {
+            throw mapIntegrityError(exception);
+        }
+    }
+
+    private void notifyInvoiceCreated(Invoice invoice) {
+        if (invoice.getContract() != null
+                && invoice.getContract().getStudent() != null
+                && invoice.getContract().getStudent().getUser() != null) {
+            String dueDate = invoice.getDueDate() != null
+                    ? invoice.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+                    : "N/A";
+            notificationService.sendNotification(
+                    NotificationType.INVOICE_CREATED,
+                    "Hóa đơn mới",
+                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s",
+                            invoice.getInvoiceType().name(), dueDate),
+                    invoice.getInvoiceId(),
+                    invoice.getContract().getStudent().getUser().getId()
+            );
+        }
     }
 
     private void validateRoomFeeContract(Contract contract, YearMonth month) {
@@ -215,24 +254,7 @@ public class InvoiceService {
         attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
-            
-            // Send notification after ROOM_FEE invoice creation
-            if (saved.getContract() != null 
-                && saved.getContract().getStudent() != null 
-                && saved.getContract().getStudent().getUser() != null) {
-                String dueDate = saved.getDueDate() != null 
-                    ? saved.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-                    : "N/A";
-                notificationService.sendNotification(
-                    NotificationType.INVOICE_CREATED,
-                    "Hóa đơn mới",
-                    String.format("Hóa đơn %s đã được tạo. Hạn thanh toán: %s", 
-                        saved.getInvoiceType().name(), dueDate),
-                    saved.getInvoiceId(),
-                    saved.getContract().getStudent().getUser().getId()
-                );
-            }
-            
+            notifyInvoiceCreated(saved);
             return invoiceMapper.toResponse(saved, overdue(saved));
         } catch (DataIntegrityViolationException exception) {
             throw mapIntegrityError(exception);
@@ -264,6 +286,34 @@ public class InvoiceService {
                 .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
                 .toList();
         return new InvoicePageResponse(content, page, size, invoices.getTotalElements(), invoices.getTotalPages());
+    }
+
+    // ===== Hóa đơn của sinh viên (chỉ của chính mình) =====
+
+    @Transactional(readOnly = true)
+    public InvoicePageResponse listMyInvoices(Long userId, String month, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "page phải >= 0 và size phải từ 1 đến 100");
+        }
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "invoiceId"));
+        Page<Invoice> invoices = month == null
+                ? invoiceRepository.findAllByContract_Student_User_Id(userId, pageable)
+                : invoiceRepository.findAllByContract_Student_User_IdAndBillingMonth(
+                        userId, parseMonth(month), pageable);
+        List<InvoiceSummaryResponse> content = invoices.getContent().stream()
+                .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
+                .toList();
+        return new InvoicePageResponse(content, page, size, invoices.getTotalElements(), invoices.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public InvoiceResponse getMyInvoice(Long userId, Long invoiceId) {
+        if (invoiceId == null || invoiceId <= 0) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "invoiceId phải là số dương");
+        }
+        Invoice invoice = invoiceRepository.findByInvoiceIdAndContract_Student_User_Id(invoiceId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hóa đơn của bạn"));
+        return invoiceMapper.toResponse(invoice, overdue(invoice));
     }
 
     @Transactional(readOnly = true)

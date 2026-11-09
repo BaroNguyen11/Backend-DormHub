@@ -58,14 +58,11 @@ public class BillingScheduler {
     }
 
     private void runCurrentMonth() {
-        if (!distributedLockRepository.tryLock(BILLING_LOCK_KEY)) {
+        // Lock giữ trên đúng 1 connection suốt tác vụ, tự nhả an toàn cả khi lỗi lẫn khi JVM chết
+        boolean executed = distributedLockRepository.runWithLock(BILLING_LOCK_KEY, () ->
+                billingBatchService.generateRoomFees(YearMonth.now(BUSINESS_ZONE)));
+        if (!executed) {
             log.info("Bỏ qua tiến trình lập hóa đơn tháng: một instance khác đang thực thi.");
-            return;
-        }
-        try {
-            billingBatchService.generateRoomFees(YearMonth.now(BUSINESS_ZONE));
-        } finally {
-            distributedLockRepository.unlock(BILLING_LOCK_KEY);
         }
     }
 }

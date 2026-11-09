@@ -120,4 +120,21 @@ public class RefreshTokenService {
                     }
                 });
     }
+
+    /**
+     * Thu hồi toàn bộ refresh token đang hiệu lực của một user
+     * (dùng khi đổi mật khẩu hoặc khóa tài khoản).
+     */
+    @Transactional
+    public void revokeAllForUser(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        refreshTokenRepository.findAllByUser_IdAndRevokedAtIsNull(userId)
+                .forEach(token -> {
+                    token.setRevokedAt(now);
+                    refreshTokenRepository.save(token);
+                });
+    }
 }

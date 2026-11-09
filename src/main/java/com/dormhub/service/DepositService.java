@@ -29,15 +29,18 @@ public class DepositService {
     private final InvoiceCreationLockRepository invoiceCreationLockRepository;
     private final NotificationService notificationService;
     private final RoomAssignmentService roomAssignmentService;
+    private final InvoiceService invoiceService;
 
     public DepositService(InvoiceRepository invoiceRepository,
                           InvoiceCreationLockRepository invoiceCreationLockRepository,
                           NotificationService notificationService,
-                          RoomAssignmentService roomAssignmentService) {
+                          RoomAssignmentService roomAssignmentService,
+                          InvoiceService invoiceService) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.notificationService = notificationService;
         this.roomAssignmentService = roomAssignmentService;
+        this.invoiceService = invoiceService;
     }
 
     @Transactional
@@ -119,11 +122,15 @@ public class DepositService {
         contract.setDepositStatus(DepositStatus.HELD);
         roomAssignmentService.assign(contract.getContractId());
 
+        // P0: sinh ngay hóa đơn tiền phòng tháng đầu theo tỷ lệ ngày ở (proration)
+        invoiceService.createFirstMonthRoomFeeIfAbsent(contract);
+
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
             notificationService.sendNotification(
-                    NotificationType.PAYMENT_SUCCESS,
-                    "Thanh toán thành công",
-                    "Thanh toán tiền cọc thành công. Hợp đồng đã được kích hoạt",
+                    NotificationType.CONTRACT_ACTIVATED,
+                    "Hợp đồng đã được kích hoạt",
+                    String.format("Thanh toán tiền cọc thành công. Hợp đồng #%d đã ACTIVE và bạn đã được phân phòng.",
+                            contract.getContractId()),
                     invoice.getInvoiceId(),
                     contract.getStudent().getUser().getId());
         }

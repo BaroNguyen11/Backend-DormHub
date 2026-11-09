@@ -86,16 +86,26 @@ public class CheckoutController {
     @PatchMapping("/manager/checkout-requests/{checkoutRequestId}/review")
     public ResponseEntity<ApiResponse<CheckoutResponse>> review(
             @PathVariable @Positive Long checkoutRequestId,
-            @Valid @RequestBody CheckoutReviewRequest request) {
+            @Valid @RequestBody CheckoutReviewRequest request,
+            @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.success("Xử lý yêu cầu trả phòng thành công",
-                checkoutService.review(checkoutRequestId, request)));
+                checkoutService.review(checkoutRequestId, request, user.getId())));
+    }
+
+    @PatchMapping("/manager/checkout-requests/{checkoutRequestId}/cancel")
+    public ResponseEntity<ApiResponse<CheckoutResponse>> cancelForManager(
+            @PathVariable @Positive Long checkoutRequestId,
+            @Valid @RequestBody CheckoutReviewRequest request) {
+        return ResponseEntity.ok(ApiResponse.success("Hủy yêu cầu trả phòng thành công",
+                checkoutService.cancelForManager(checkoutRequestId, request)));
     }
 
     @PostMapping("/manager/checkout-requests/{checkoutRequestId}/complete")
     public ResponseEntity<ApiResponse<CheckoutResponse>> complete(
             @PathVariable @Positive Long checkoutRequestId,
-            @Valid @RequestBody CheckoutCompleteRequest request) {
+            @Valid @RequestBody CheckoutCompleteRequest request,
+            @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.success("Xác nhận trả phòng thành công",
-                checkoutService.complete(checkoutRequestId, request)));
+                checkoutService.complete(checkoutRequestId, request, user.getId())));
     }
 }

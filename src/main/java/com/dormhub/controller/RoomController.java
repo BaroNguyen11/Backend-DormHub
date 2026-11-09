@@ -23,6 +23,12 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RoomController {
     
+    private static final int MAX_PAGE_SIZE = 100;
+    // Whitelist sort: chặn PropertyReferenceException → 500 khi FE truyền sort tùy ý
+    private static final java.util.Set<String> ALLOWED_SORT_FIELDS =
+            java.util.Set.of("id", "roomNumber", "floor", "capacity", "pricePerMonth", "status", "roomType");
+    private static final java.util.Set<String> ALLOWED_SORT_DIRECTIONS = java.util.Set.of("ASC", "DESC");
+
     private final RoomService roomService;
     
     @GetMapping
@@ -32,9 +38,19 @@ public class RoomController {
             @RequestParam(required = false) Long buildingId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "id") String sortBy) {
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "ASC") String direction) {
         
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortBy));
+        if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
+            throw new com.dormhub.exception.AppException(com.dormhub.exception.ErrorCode.INVALID_REQUEST,
+                    "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
+        }
+        String safeSortBy = ALLOWED_SORT_FIELDS.contains(sortBy) ? sortBy : "id";
+        Sort.Direction sortDirection = ALLOWED_SORT_DIRECTIONS.contains(direction.toUpperCase())
+                ? Sort.Direction.fromString(direction)
+                : Sort.Direction.ASC;
+        Pageable pageable = PageRequest.of(page, size,
+                Sort.by(sortDirection, safeSortBy).and(Sort.by(Sort.Direction.ASC, "id")));
         Page<RoomResponse> rooms = roomService.getAllRooms(status, roomType, buildingId, pageable);
         return ResponseEntity.ok(ApiResponse.success("Get rooms successfully", rooms));
     }

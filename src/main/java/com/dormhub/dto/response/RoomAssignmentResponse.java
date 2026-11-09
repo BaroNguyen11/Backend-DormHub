@@ -2,6 +2,7 @@ package com.dormhub.dto.response;
 
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,4 +23,12 @@ public class RoomAssignmentResponse {
     private final LocalDateTime assignedAt;
     private final LocalDateTime checkInAt;
     private final LocalDateTime checkOutAt;
+
+    // ===== Thông tin phòng (phục vụ màn hình "Phòng của tôi") =====
+    private final String roomNumber;
+    private final String buildingName;
+    private final Integer floor;
+    private final Integer capacity;
+    private final Integer currentOccupancy;
+    private final BigDecimal pricePerMonth;
 }

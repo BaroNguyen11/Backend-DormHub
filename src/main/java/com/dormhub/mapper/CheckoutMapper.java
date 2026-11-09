@@ -23,6 +23,8 @@ public class CheckoutMapper {
                 .reason(request.getReason())
                 .processedAt(request.getProcessedAt())
                 .note(request.getNote())
+                .reviewedByName(request.getReviewedBy() == null
+                        ? null : request.getReviewedBy().getFullName())
                 .depositStatus(request.getContract().getDepositStatus())
                 .build();
     }

@@ -3,11 +3,14 @@ package com.dormhub.service;
 
 import com.dormhub.dto.request.StudentProfileUpdateRequest;
 import com.dormhub.dto.response.StudentProfileResponse;
+import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.UserStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.StudentMapper;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.StudentRepository;
 import com.dormhub.specification.StudentSpecification;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +21,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -27,7 +32,9 @@ import java.util.Set;
 public class StudentService {
 
     private final StudentRepository studentRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
     private final StudentMapper studentMapper;
+    private final RefreshTokenService refreshTokenService;
 
     public StudentProfileResponse getMyProfile(Long userId) {
         Student student = studentRepository.findByUserId(userId)
@@ -46,11 +53,34 @@ public class StudentService {
                 .orElseThrow(() ->
                         new AppException(ErrorCode.STUDENT_NOT_FOUND));
 
+        // Bổ sung mã sinh viên MỘT LẦN DUY NHẤT khi hồ sơ còn trống mã
+        if (StringUtils.hasText(request.getStudentCode())) {
+            String incomingCode = request.getStudentCode().trim();
+            if (StringUtils.hasText(student.getStudentCode())) {
+                if (!incomingCode.equals(student.getStudentCode())) {
+                    throw new AppException(ErrorCode.INVALID_REQUEST,
+                            "Mã sinh viên đã được cấp và không thể thay đổi. Vui lòng liên hệ ban quản lý KTX.");
+                }
+            } else if (studentRepository.existsByStudentCode(incomingCode)) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Mã sinh viên này đã thuộc về một tài khoản khác. Vui lòng kiểm tra lại.");
+            } else {
+                student.setStudentCode(incomingCode);
+            }
+        }
+
         if (request.getDateOfBirth() != null) {
             student.setDateOfBirth(request.getDateOfBirth());
         }
 
-        if (request.getGender() != null) {
+        if (request.getGender() != null && request.getGender() != student.getGender()) {
+            // BR §5.2: chặn đổi giới tính khi đang lưu trú tại tòa áp giới tính
+            boolean hasActiveStay = roomAssignmentRepository.existsByStudent_IdAndStatusIn(
+                    student.getId(), List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN));
+            if (hasActiveStay) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Không thể đổi giới tính khi đang lưu trú tại ký túc xá. Hãy liên hệ quản lý KTX");
+            }
             student.setGender(request.getGender());
         }
 
@@ -63,6 +93,9 @@ public class StudentService {
         }
         if (request.getPhone() != null){
             student.getUser().setPhone(request.getPhone());
+        }
+        if (request.getCic() != null) {
+            student.setCic(request.getCic());
         }
 
         studentRepository.save(student);
@@ -126,8 +159,14 @@ public class StudentService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
+        boolean statusChanged = student.getUser().getStatus() != newStatus;
         student.getUser().setStatus(newStatus);
         studentRepository.save(student);
+
+        // Khóa tài khoản phải revoke refresh token đang hiệu lực để phiên đăng nhập chết ngay
+        if (statusChanged && newStatus == UserStatus.LOCKED) {
+            refreshTokenService.revokeAllForUser(student.getUser().getId());
+        }
 
         return studentMapper.toResponse(student);
     }

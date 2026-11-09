@@ -4,7 +4,6 @@ import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -30,7 +29,7 @@ public class MaintenanceCreateRequest {
     @Size(max = 500, message = "URL ảnh không được vượt quá 500 ký tự")
     private String imageUrl;
 
-    @NotNull(message = "ID phòng không được để trống")
-    @Positive(message = "ID phòng phải là số dương")
-    private Long roomId;
+    // P0: đã bỏ roomId — backend tự suy phòng đang ở từ RoomAssignment CHECKED_IN,
+    // không tin roomId client gửi lên (chặn báo hỏng "hộ" phòng khác).
+    // FE cũ còn gửi roomId sẽ được Jackson bỏ qua (không lỗi).
 }

@@ -336,34 +336,21 @@ public class AuthService {
                 .trim()
                 .toLowerCase(Locale.ROOT);
 
-        log.info("Login attempt for identifier: {}", identifier);
-
-        // Try to find user by email first, if not found try username
+        // BR §4.3: tuyệt đối không log credential, hash mật khẩu hay độ dài mật khẩu
         User user = userRepository.findByEmail(identifier)
                 .or(() -> userRepository.findByUsername(identifier))
-                .orElseThrow(() -> {
-                    log.error("User not found for identifier: {}", identifier);
-                    return new AppException(ErrorCode.INVALID_CREDENTIALS);
-                });
-
-        log.info("User found: {}, status: {}", user.getEmail(), user.getStatus());
-        log.info("Password hash from DB (first 30 chars): {}", user.getPasswordHash().substring(0, 30));
-        log.info("Password from request length: {}", request.getPassword().length());
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_CREDENTIALS));
 
         boolean passwordMatches = passwordEncoder.matches(
                 request.getPassword(),
                 user.getPasswordHash()
         );
 
-        log.info("Password matches: {}", passwordMatches);
-
         if (!passwordMatches) {
-            log.error("Password mismatch for user: {}", user.getEmail());
             throw new AppException(ErrorCode.INVALID_CREDENTIALS);
         }
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-            log.error("User status not active: {}", user.getStatus());
             throw new AppException(ErrorCode.ACCOUNT_NOT_ACTIVE);
         }
 
@@ -444,5 +431,8 @@ public class AuthService {
         // 5. Cập nhật mật khẩu mới
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+
+        // 6. Thu hồi mọi refresh token đang hiệu lực trên các thiết bị khác (BR §4.5)
+        refreshTokenService.revokeAllForUser(userId);
     }
 }

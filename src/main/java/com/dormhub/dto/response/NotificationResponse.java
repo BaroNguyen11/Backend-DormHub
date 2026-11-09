@@ -1,6 +1,7 @@
 package com.dormhub.dto.response;
 
 import com.dormhub.entity.enums.NotificationType;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -18,6 +19,7 @@ public class NotificationResponse {
     private String title;
     private String body;
     private Long refId;
+    @JsonProperty("isRead") // Lombok generates isRead() method → JSON key would be "read", force it to "isRead"
     private boolean isRead;
     private LocalDateTime createdAt;
     private LocalDateTime readAt;

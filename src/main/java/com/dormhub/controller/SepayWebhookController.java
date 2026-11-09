@@ -32,10 +32,13 @@ public class SepayWebhookController {
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Map<String, Object>> receive(
+            // Chuẩn SePay thật: "Authorization: Apikey <API_KEY>"
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            // Tuỳ chọn legacy cho script simulate: HMAC tự chế
             @RequestHeader(value = "X-SePay-Signature", required = false) String signature,
             @RequestHeader(value = "X-SePay-Timestamp", required = false) String timestamp,
             @RequestBody byte[] rawBody) {
-        if (!signatureVerifier.verify(signature, timestamp, rawBody)) {
+        if (!signatureVerifier.verify(authorization, signature, timestamp, rawBody)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false));
         }
 

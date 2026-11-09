@@ -35,4 +35,9 @@ public interface NotificationReceiverRepository extends JpaRepository<Notificati
     @Modifying
     @Query("UPDATE NotificationReceiver nr SET nr.isRead = true, nr.readAt = :now WHERE nr.user.id = :userId AND nr.isRead = false")
     int markAllAsRead(@Param("userId") Long userId, @Param("now") LocalDateTime now);
+
+    // Dọn dẹp: xóa bản ghi nhận của các thông báo cũ hơn mốc thời gian (chạy trước khi xóa Notification cha)
+    @Modifying
+    @Query("DELETE FROM NotificationReceiver nr WHERE nr.notification.createdAt < :cutoff")
+    int deleteByNotification_CreatedAtBefore(@Param("cutoff") LocalDateTime cutoff);
 }
