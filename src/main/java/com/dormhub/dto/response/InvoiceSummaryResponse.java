@@ -21,4 +21,7 @@ public class InvoiceSummaryResponse {
     private final InvoiceStatus status;
     private final boolean overdue;
     private final BigDecimal totalAmount;
+    private final String studentName;
+    private final String roomNumber;
+    private final String buildingName;
 }

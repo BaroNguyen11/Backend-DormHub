@@ -20,12 +20,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final NotificationRepository notificationRepository;
     private final NotificationReceiverRepository notificationReceiverRepository;
@@ -37,37 +40,44 @@ public class NotificationService {
     // ==========================================
 
     /**
-     * Gửi thông báo cho nhiều người dùng cùng lúc (Ví dụ: thông báo toàn phòng, toàn tòa)
+     * Gửi thông báo cho nhiều người dùng cùng lúc (Ví dụ: thông báo toàn phòng, toàn tòa).
+     * BR §17.5: lỗi khi gửi thông báo KHÔNG được làm sai trạng thái nghiệp vụ —
+     * mọi lỗi được ghi log thay vì ném ra làm rollback nghiệp vụ gọi nó.
      */
     @Transactional
     public void sendNotification(NotificationType type, String title, String body, Long refId, List<Long> receiverUserIds) {
-        if (receiverUserIds == null || receiverUserIds.isEmpty()) {
-            return;
+        try {
+            if (receiverUserIds == null || receiverUserIds.isEmpty()) {
+                return;
+            }
+
+            // 1. Tạo Notification chung
+            Notification notification = Notification.builder()
+                    .type(type)
+                    .title(title)
+                    .body(body)
+                    .refId(refId)
+                    .build();
+            Notification savedNotification = notificationRepository.save(notification);
+
+            // 2. Tìm danh sách User nhận
+            List<User> receivers = userRepository.findAllById(receiverUserIds);
+
+            // 3. Tạo bản ghi NotificationReceiver cho từng User
+            List<NotificationReceiver> receiverRecords = receivers.stream()
+                    .map(user -> NotificationReceiver.builder()
+                            .notification(savedNotification)
+                            .user(user)
+                            .isRead(false)
+                            .build())
+                    .toList();
+
+            notificationReceiverRepository.saveAll(receiverRecords);
+            log.info("Đã gửi thông báo [{}] đến {} người dùng.", type, receiverRecords.size());
+        } catch (RuntimeException e) {
+            log.error("Gửi thông báo thất bại (không ảnh hưởng nghiệp vụ): type={}, refId={}, error={}",
+                    type, refId, e.getMessage());
         }
-
-        // 1. Tạo Notification chung
-        Notification notification = Notification.builder()
-                .type(type)
-                .title(title)
-                .body(body)
-                .refId(refId)
-                .build();
-        Notification savedNotification = notificationRepository.save(notification);
-
-        // 2. Tìm danh sách User nhận
-        List<User> receivers = userRepository.findAllById(receiverUserIds);
-
-        // 3. Tạo bản ghi NotificationReceiver cho từng User
-        List<NotificationReceiver> receiverRecords = receivers.stream()
-                .map(user -> NotificationReceiver.builder()
-                        .notification(savedNotification)
-                        .user(user)
-                        .isRead(false)
-                        .build())
-                .toList();
-
-        notificationReceiverRepository.saveAll(receiverRecords);
-        log.info("Đã gửi thông báo [{}] đến {} người dùng.", type, receiverRecords.size());
     }
 
     /**
@@ -79,6 +89,14 @@ public class NotificationService {
             throw new AppException(ErrorCode.INVALID_REQUEST, "receiverUserId cannot be null");
         }
         sendNotification(type, title, body, refId, List.of(receiverUserId));
+    }
+
+    /**
+     * Overload không có refId (dùng cho thông báo GENERAL từ manager)
+     */
+    @Transactional
+    public void sendNotification(Long receiverUserId, String title, String body, NotificationType type) {
+        sendNotification(type, title, body, null, receiverUserId);
     }
 
     // ==========================================
@@ -111,7 +129,7 @@ public class NotificationService {
 
         if (!receiver.isRead()) {
             receiver.setRead(true);
-            receiver.setReadAt(LocalDateTime.now());
+            receiver.setReadAt(LocalDateTime.now(BUSINESS_ZONE));
             notificationReceiverRepository.save(receiver);
         }
     }
@@ -119,6 +137,6 @@ public class NotificationService {
     // Đánh dấu tất cả thông báo là đã đọc
     @Transactional
     public void markAllAsRead(Long userId) {
-        notificationReceiverRepository.markAllAsRead(userId, LocalDateTime.now());
+        notificationReceiverRepository.markAllAsRead(userId, LocalDateTime.now(BUSINESS_ZONE));
     }
 }

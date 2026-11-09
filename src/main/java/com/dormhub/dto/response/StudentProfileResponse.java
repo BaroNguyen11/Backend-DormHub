@@ -2,6 +2,7 @@
 package com.dormhub.dto.response;
 
 import com.dormhub.entity.enums.Gender;
+import com.dormhub.entity.enums.UserStatus;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -22,4 +23,5 @@ public class StudentProfileResponse {
     private final String username;
     private final String email;
     private final String fullName;
+    private final UserStatus status;
 }

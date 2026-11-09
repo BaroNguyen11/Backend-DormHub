@@ -1,15 +1,23 @@
 package com.dormhub.controller;
 
+import com.dormhub.dto.request.NotificationCreateRequest;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.NotificationResponse;
+import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
+import com.dormhub.entity.enums.NotificationType;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.service.NotificationService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -18,6 +26,7 @@ import java.util.Map;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final RoomAssignmentRepository roomAssignmentRepository;
 
     // 1. Lấy danh sách thông báo (hỗ trợ lọc chưa đọc: ?unreadOnly=true)
     @GetMapping
@@ -57,5 +66,43 @@ public class NotificationController {
     ) {
         notificationService.markAllAsRead(user.getId());
         return ResponseEntity.ok(ApiResponse.success("Đánh dấu tất cả là đã đọc thành công", null));
+    }
+
+    // 5. [MANAGER] Gửi thông báo cho sinh viên
+    @PostMapping("/manager/notifications")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<Void>> createNotification(
+            @Valid @RequestBody NotificationCreateRequest request,
+            @AuthenticationPrincipal User user
+    ) {
+        // Get target students
+        List<Student> targetStudents;
+        if (request.getBuildingId() != null) {
+            // Students with ASSIGNED or CHECKED_IN status in this building
+            targetStudents = roomAssignmentRepository.findActiveStudentsByBuilding(
+                    request.getBuildingId(),
+                    List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN)
+            );
+        } else {
+            // All students with active room assignments
+            targetStudents = roomAssignmentRepository.findAllActiveStudents(
+                    List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN)
+            );
+        }
+
+        // Send notifications using NotificationService
+        for (Student student : targetStudents) {
+            notificationService.sendNotification(
+                    student.getUser().getId(),
+                    request.getTitle(),
+                    request.getBody(),
+                    NotificationType.GENERAL
+            );
+        }
+
+        return ResponseEntity.ok(ApiResponse.success(
+                "Đã gửi thông báo đến " + targetStudents.size() + " sinh viên",
+                null
+        ));
     }
 }

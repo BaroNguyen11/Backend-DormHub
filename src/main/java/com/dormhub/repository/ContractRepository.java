@@ -7,10 +7,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.Collection;
 import java.util.List;
@@ -45,17 +48,23 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         Long getHoldCount();
     }
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Page<Contract> findAllByStatus(ContractStatus status, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Page<Contract> findAllByStudent_IdAndStatus(
             Long studentId, ContractStatus status, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Optional<Contract> findByDormApplication_Id(Long dormApplicationId);
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     List<Contract> findAllByDormApplication_IdIn(List<Long> dormApplicationIds);
 
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select contract from Contract contract where contract.contractId = :contractId")
     Optional<Contract> findByContractIdForUpdate(@Param("contractId") Long contractId);
@@ -64,6 +73,7 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
      * Find active contract for a room in a specific billing month.
      * A contract is active if its date range includes the billing month.
      */
+    @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     @Query("SELECT c FROM Contract c " +
            "WHERE c.room.id = :roomId " +
            "AND c.status = 'ACTIVE' " +
@@ -75,4 +85,17 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
         @Param("billingMonth") String billingMonth  // Format: "YYYY-MM" like "2026-11"
     );
 
+    // ===== Vòng đời hợp đồng (auto-expire + nhắc hạn) =====
+
+    @EntityGraph(attributePaths = {"student", "student.user", "room"})
+    List<Contract> findAllByStatusAndEndDateBetween(
+            ContractStatus status, LocalDateTime start, LocalDateTime end);
+
+    /** Hết hạn hàng loạt hợp đồng ACTIVE đã quá endDate (idempotent, chỉ đích danh 1 cặp trạng thái). */
+    @Modifying
+    @Query("UPDATE Contract c SET c.status = :newStatus "
+            + "WHERE c.status = :currentStatus AND c.endDate IS NOT NULL AND c.endDate < :now")
+    int bulkExpireOverdueContracts(@Param("currentStatus") ContractStatus currentStatus,
+                                   @Param("newStatus") ContractStatus newStatus,
+                                   @Param("now") LocalDateTime now);
 }

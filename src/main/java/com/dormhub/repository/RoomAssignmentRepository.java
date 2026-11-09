@@ -5,6 +5,7 @@ import com.dormhub.entity.enums.RoomAssignmentStatus;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +60,20 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
     Optional<RoomAssignment> findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
             Long studentId, RoomAssignmentStatus status);
 
+    /**
+     * Bản có KHÓA biên (PESSIMISTIC_WRITE) của truy vấn phân phòng hiện tại.
+     * Dùng cho các luồng check-then-act (tạo yêu cầu chuyển phòng / trả phòng):
+     * hai request đồng thời sẽ tuần tự hóa trên dòng phân phòng của sinh viên,
+     * nên lần kiểm tra "đã tồn tại request PENDING" phía sau không thể bị vượt qua.
+     * Có thể trả về nhiều dòng nếu dữ liệu lịch sử lệch — caller lấy dòng mới nhất.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select assignment from RoomAssignment assignment "
+            + "where assignment.student.id = :studentId and assignment.status = :status "
+            + "order by assignment.assignmentId desc")
+    List<RoomAssignment> findAllByStudent_IdAndStatusOrderByAssignmentIdDescForUpdate(
+            @Param("studentId") Long studentId, @Param("status") RoomAssignmentStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select assignment from RoomAssignment assignment "
             + "where assignment.assignmentId = :assignmentId")
@@ -66,4 +81,24 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
             @Param("assignmentId") Long assignmentId);
 
     long countByRoom_IdAndStatusIn(Long roomId, Collection<RoomAssignmentStatus> statuses);
+
+    /**
+     * Tìm tất cả sinh viên đang ở (ASSIGNED hoặc CHECKED_IN) trong một tòa nhà cụ thể.
+     * Dùng để gửi thông báo cho sinh viên theo tòa.
+     */
+    @Query("select distinct assignment.student from RoomAssignment assignment "
+            + "where assignment.room.building.id = :buildingId "
+            + "and assignment.status in :statuses")
+    List<com.dormhub.entity.Student> findActiveStudentsByBuilding(
+            @Param("buildingId") Long buildingId,
+            @Param("statuses") Collection<RoomAssignmentStatus> statuses);
+
+    /**
+     * Tìm tất cả sinh viên đang có phân phòng hoạt động (ASSIGNED hoặc CHECKED_IN).
+     * Dùng để gửi thông báo cho toàn bộ sinh viên.
+     */
+    @Query("select distinct assignment.student from RoomAssignment assignment "
+            + "where assignment.status in :statuses")
+    List<com.dormhub.entity.Student> findAllActiveStudents(
+            @Param("statuses") Collection<RoomAssignmentStatus> statuses);
 }

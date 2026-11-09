@@ -23,4 +23,7 @@ public class InvoiceResponse {
     private final boolean overdue;
     private final BigDecimal totalAmount;
     private final List<InvoiceDetailResponse> details;
+    private final String studentName;
+    private final String roomNumber;
+    private final String buildingName;
 }

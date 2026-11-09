@@ -19,7 +19,7 @@ import org.springframework.data.repository.query.Param;
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     @Override
-    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})
     Page<Invoice> findAll(Pageable pageable);
 
     boolean existsByRoom_IdAndBillingMonth(Long roomId, YearMonth billingMonth);
@@ -48,9 +48,29 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     @Query("select invoice from Invoice invoice where invoice.invoiceId = :invoiceId")
     Optional<Invoice> findByIdForUpdate(@Param("invoiceId") Long invoiceId);
 
-    @EntityGraph(attributePaths = {"room", "contract", "contract.room"})
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})
     Page<Invoice> findByBillingMonth(YearMonth billingMonth, Pageable pageable);
     
-    @EntityGraph(attributePaths = {"contract", "contract.student", "contract.student.user"})
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})
     List<Invoice> findByStatusAndDueDateBetween(InvoiceStatus status, LocalDateTime start, LocalDateTime end);
+
+    // ===== Hóa đơn của sinh viên (chỉ của chính mình - kiểm soát sở hữu) =====
+
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})
+    Page<Invoice> findAllByContract_Student_User_Id(Long userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})
+    Page<Invoice> findAllByContract_Student_User_IdAndBillingMonth(
+            Long userId, YearMonth billingMonth, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "details"})
+    Optional<Invoice> findByInvoiceIdAndContract_Student_User_Id(Long invoiceId, Long userId);
+
+    // Hóa đơn đặt cọc CHƯA TRẢ gần nhất của sinh viên — dùng cho redirect sau login
+    // (đơn đã duyệt nhưng chưa trả cọc -> đưa thẳng tới hóa đơn cần thanh toán).
+    // Lưu ý: khóa chính của Invoice là invoiceId (cột invoice_id), KHÔNG phải "id".
+    Optional<Invoice> findFirstByContract_Student_User_IdAndInvoiceTypeAndStatusOrderByInvoiceIdDesc(
+            Long userId, InvoiceType invoiceType, InvoiceStatus status);
+    
+    long countByStatus(InvoiceStatus status);
 }

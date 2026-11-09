@@ -84,6 +84,9 @@ public class PaymentService {
             }
             if (!existing.getExpiresAt().isAfter(now)) {
                 existing.setStatus(PaymentStatus.EXPIRED);
+                // Ghi tường minh (JPA dirty checking cũng tự flush khi commit,
+                // nhưng để rõ ý đồ và phụ thuộc ít vào cơ chế nền).
+                paymentRepository.save(existing);
             } else if (active != null) {
                 throw new AppException(ErrorCode.PAYMENT_CONFLICT);
             } else {

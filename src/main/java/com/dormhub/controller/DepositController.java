@@ -12,6 +12,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * @deprecated Deposit invoices are now auto-created when dorm applications are approved.
+ * This controller is no longer needed in the standard workflow.
+ * See: DormApplicationService.approve() which creates deposit invoices automatically.
+ */
+@Deprecated
 @Validated
 @RestController
 @RequestMapping("/api/v1/manager")
@@ -23,6 +29,10 @@ public class DepositController {
         this.depositService = depositService;
     }
 
+    /**
+     * @deprecated Use automatic deposit invoice creation via application approval instead.
+     */
+    @Deprecated
     @PostMapping("/contracts/{contractId}/deposit-invoice")
     public ResponseEntity<ApiResponse<DepositFlowResponse>> createDepositInvoice(
             @PathVariable @Positive Long contractId) {

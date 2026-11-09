@@ -24,6 +24,14 @@ public class RoomAssignmentMapper {
                 .assignedAt(assignment.getAssignedAt())
                 .checkInAt(assignment.getCheckInAt())
                 .checkOutAt(assignment.getCheckOutAt())
+                // Thông tin phòng để dashboard hiển thị "Phòng của tôi"
+                .roomNumber(assignment.getRoom().getRoomNumber())
+                .buildingName(assignment.getRoom().getBuilding() == null
+                        ? null : assignment.getRoom().getBuilding().getName())
+                .floor(assignment.getRoom().getFloor())
+                .capacity(assignment.getRoom().getCapacity())
+                .currentOccupancy(assignment.getRoom().getCurrentOccupancy())
+                .pricePerMonth(assignment.getRoom().getPricePerMonth())
                 .build();
     }
 }

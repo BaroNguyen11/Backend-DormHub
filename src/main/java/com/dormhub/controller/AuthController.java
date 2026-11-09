@@ -3,11 +3,14 @@ package com.dormhub.controller;
 import com.dormhub.dto.request.*;
 import com.dormhub.dto.response.*;
 import com.dormhub.entity.User;
+import com.dormhub.entity.enums.Role;
 import com.dormhub.service.AuthService;
+import com.dormhub.service.SepayPaymentSyncService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -18,13 +21,7 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-
-import com.dormhub.repository.UserRepository;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Slf4j
 @RestController
@@ -33,8 +30,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class AuthController {
 
     private final AuthService authService;
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final SepayPaymentSyncService sepayPaymentSyncService;
 
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<RegisterResponse>> register(
@@ -42,7 +38,7 @@ public class AuthController {
 
         RegisterResponse response = authService.register(request);
 
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Đăng ký thành công", response));
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("Cấp tài khoản thành công, OTP đã được gửi đến email sinh viên", response));
     }
     @PostMapping("/verify-email")
     public ResponseEntity<ApiResponse<VerifyOtpResponse>> verifyEmail(
@@ -81,13 +77,16 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest request) {
 
-        log.info("=== LOGIN ATTEMPT ===");
-        log.info("Email/Username: {}", request.getEmail());
-        log.info("Password length: {}", request.getPassword().length());
-
         LoginResult result = authService.login(request);
 
         log.info("Login successful for: {}", result.getUser().getEmail());
+
+        // Đối soát bù giao dịch SePay ngay sau khi sinh viên đăng nhập (chạy nền,
+        // không chặn login): nếu webhook bị lỡ, tiền đã chuyển vẫn được ghép vào
+        // phiên thanh toán PENDING -> payments chuyển SUCCESS và sinh viên vào được phòng.
+        if (result.getUser().getRole() == Role.STUDENT) {
+            sepayPaymentSyncService.syncInBackground(result.getUser().getUserId());
+        }
 
         ResponseCookie accessCookie = ResponseCookie
                 .from("access_token", result.getAccessToken())
@@ -254,48 +253,5 @@ public class AuthController {
         return ResponseEntity.ok(
                 ApiResponse.success("Đổi mật khẩu thành công", null)
         );
-    }
-
-    // TEMPORARY - For debugging only, remove after testing
-    @GetMapping("/test-password")
-    public ResponseEntity<?> testPassword() {
-        String testPassword = "password123";
-        String hashFromDb = "$2a$10$slYQmyNdGzTn7ZMSnF51zuB.MbVN/Y8D8n7ViLLxE3eCp3oD.aBqG";
-        
-        boolean matches = passwordEncoder.matches(testPassword, hashFromDb);
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("password", testPassword);
-        result.put("hash", hashFromDb);
-        result.put("matches", matches);
-        
-        // Also test with actual user from database
-        Optional<User> userOpt = userRepository.findByEmail("manager@dormhub.com");
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            boolean userPasswordMatches = passwordEncoder.matches(testPassword, user.getPasswordHash());
-            result.put("userEmail", user.getEmail());
-            result.put("userHashPrefix", user.getPasswordHash().substring(0, 20));
-            result.put("userPasswordMatches", userPasswordMatches);
-        }
-        
-        return ResponseEntity.ok(result);
-    }
-
-    // TEMPORARY - Generate correct password hash
-    @GetMapping("/generate-hash")
-    public ResponseEntity<?> generateHash(@RequestParam(defaultValue = "password123") String password) {
-        String hash = passwordEncoder.encode(password);
-        
-        // Test that it works
-        boolean matches = passwordEncoder.matches(password, hash);
-        
-        Map<String, Object> result = new HashMap<>();
-        result.put("password", password);
-        result.put("generatedHash", hash);
-        result.put("verification", matches);
-        result.put("message", "Copy this hash to data.sql");
-        
-        return ResponseEntity.ok(result);
     }
 }

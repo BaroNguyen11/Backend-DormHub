@@ -13,6 +13,9 @@ import java.time.LocalDate;
 @Setter
 public class StudentProfileUpdateRequest {
 
+    @Pattern(regexp = "^$|^\\d{8}$", message = "Mã sinh viên phải gồm đúng 8 chữ số")
+    private String studentCode;
+
     @Past(message = "Ngày sinh phải nhỏ hơn ngày hiện tại")
     private LocalDate dateOfBirth;
 
@@ -28,6 +31,11 @@ public class StudentProfileUpdateRequest {
     )
     private String avatarUrl;
 
-    @Pattern(regexp = "^(0|\\+84)[3|5|7|8|9][0-9]{8}$", message = "Số điện thoại không hợp lệ")
+    // SĐT Việt Nam: 0 hoặc +84, đầu số 3/5/7/8/9, tổng 10 chữ số
+    @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$", message = "Số điện thoại không hợp lệ")
     private String phone;
+
+    // Căn cước công dân 12 chữ số — SV được tự bổ sung/sửa khi trường nhập sai
+    @Pattern(regexp = "^\\d{12}$", message = "Số CCCD phải gồm đúng 12 chữ số")
+    private String cic;
 }

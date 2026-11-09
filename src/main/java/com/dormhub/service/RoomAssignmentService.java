@@ -15,6 +15,7 @@ import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
@@ -50,14 +51,16 @@ public class RoomAssignmentService {
     private final BuildingRepository buildingRepository;
     private final StudentRepository studentRepository;
     private final RoomAssignmentMapper roomAssignmentMapper;
-
+    private final RoomStatusService roomStatusService;
+    private final NotificationService notificationService;
     public RoomAssignmentService(RoomAssignmentRepository roomAssignmentRepository,
                                  ContractRepository contractRepository,
                                  InvoiceRepository invoiceRepository,
                                  RoomRepository roomRepository,
                                  BuildingRepository buildingRepository,
                                  StudentRepository studentRepository,
-                                 RoomAssignmentMapper roomAssignmentMapper) {
+                                 RoomAssignmentMapper roomAssignmentMapper,
+                                 RoomStatusService roomStatusService, NotificationService notificationService) {
         this.roomAssignmentRepository = roomAssignmentRepository;
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
@@ -65,6 +68,8 @@ public class RoomAssignmentService {
         this.buildingRepository = buildingRepository;
         this.studentRepository = studentRepository;
         this.roomAssignmentMapper = roomAssignmentMapper;
+        this.roomStatusService = roomStatusService;
+        this.notificationService = notificationService;
     }
 
     @Transactional
@@ -122,13 +127,21 @@ public class RoomAssignmentService {
         assignment.setRoom(room);
         assignment.setAssignedBy(approver);
         assignment.setStatus(RoomAssignmentStatus.ASSIGNED);
+        RoomAssignment savedAssignment = roomAssignmentRepository.saveAndFlush(assignment);
 
-        room.setCurrentOccupancy(room.getCurrentOccupancy() + 1);
-        room.setStatus(room.getCurrentOccupancy() + otherPendingHolds >= room.getCapacity()
-                ? (otherPendingHolds > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
-                : RoomStatus.AVAILABLE);
-        roomRepository.save(room);
-        return roomAssignmentMapper.toResponse(roomAssignmentRepository.save(assignment));
+        // Đồng bộ occupancy + trạng thái phòng qua hàm chuẩn duy nhất (P0)
+        roomStatusService.syncOccupancyAndRefreshStatus(room.getId());
+
+        if (student.getUser() != null) {
+            notificationService.sendNotification(
+                    NotificationType.ROOM_ASSIGNED,
+                    "Đã được phân phòng",
+                    String.format("Bạn đã được phân vào phòng %s, tòa %s. Vui lòng đến văn phòng KTX để nhận phòng.",
+                            room.getRoomNumber(), room.getBuilding().getName()),
+                    contract.getContractId(),
+                    student.getUser().getId());
+        }
+        return roomAssignmentMapper.toResponse(savedAssignment);
     }
 
     public Page<RoomAssignmentResponse> getMyAssignments(Long userId, int page, int size) {

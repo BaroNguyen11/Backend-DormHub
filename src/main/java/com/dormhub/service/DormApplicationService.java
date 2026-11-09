@@ -13,6 +13,7 @@ import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.InvoiceType;
+import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -44,6 +46,7 @@ import java.util.stream.Collectors;
 public class DormApplicationService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final List<DormApplicationStatus> ACTIVE_STATUSES =
             List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED);
 
@@ -54,6 +57,7 @@ public class DormApplicationService {
     private final RoomRepository roomRepository;
     private final UserRepository userRepository;
     private final ContractService contractService;
+    private final NotificationService notificationService;
     private final DormApplicationMapper dormApplicationMapper;
 
     @Transactional
@@ -76,7 +80,17 @@ public class DormApplicationService {
         application.setStatus(DormApplicationStatus.PENDING);
         application.setNote(normalizeNote(request.getNote()));
 
-        return toResponse(dormApplicationRepository.save(application));
+        DormApplication saved = dormApplicationRepository.save(application);
+        // Thông báo nộp đơn thành công (BR §17.2 - APPLICATION_SUBMITTED)
+        if (student.getUser() != null) {
+            notificationService.sendNotification(
+                    NotificationType.APPLICATION_SUBMITTED,
+                    "Đã nộp đơn đăng ký lưu trú",
+                    String.format("Đơn #%d của bạn đã được nộp và đang chờ quản lý duyệt.", saved.getId()),
+                    saved.getId(),
+                    student.getUser().getId());
+        }
+        return toResponse(saved);
     }
 
     public Page<DormApplicationResponse> getMyApplications(
@@ -166,7 +180,7 @@ public class DormApplicationService {
 
         application.setStatus(request.getStatus());
         application.setReviewNote(normalizeNote(request.getNote()));
-        application.setProcessedAt(LocalDateTime.now());
+        application.setProcessedAt(LocalDateTime.now(BUSINESS_ZONE));
         if (reviewerUserId == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
         }
@@ -174,6 +188,21 @@ public class DormApplicationService {
         application.setProcessedBy(reviewer);
         if (request.getStatus() == DormApplicationStatus.APPROVED) {
             contractService.createPendingForApprovedApplication(application);
+        }
+        // Thông báo kết quả duyệt đơn cho sinh viên (BR §17.2 - APPLICATION_APPROVED/REJECTED)
+        if (application.getStudent() != null && application.getStudent().getUser() != null) {
+            boolean approved = request.getStatus() == DormApplicationStatus.APPROVED;
+            String title = approved ? "Đơn đăng ký lưu trú đã được duyệt"
+                    : "Đơn đăng ký lưu trú bị từ chối";
+            String body = approved
+                    ? String.format("Đơn #%d đã được duyệt. Hợp đồng và hóa đơn đặt cọc đã được tạo, vui lòng thanh toán cọc để giữ chỗ.", applicationId)
+                    : String.format("Đơn #%d đã bị từ chối.", applicationId);
+            if (application.getReviewNote() != null) {
+                body += " Lý do: " + application.getReviewNote();
+            }
+            notificationService.sendNotification(
+                    approved ? NotificationType.APPLICATION_APPROVED : NotificationType.APPLICATION_REJECTED,
+                    title, body, applicationId, application.getStudent().getUser().getId());
         }
         return toResponse(dormApplicationRepository.save(application));
     }

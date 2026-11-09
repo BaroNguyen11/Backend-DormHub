@@ -23,5 +23,6 @@ public class CheckoutResponse {
     private final String reason;
     private final LocalDateTime processedAt;
     private final String note;
+    private final String reviewedByName;
     private final DepositStatus depositStatus;
 }

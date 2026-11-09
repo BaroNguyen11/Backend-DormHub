@@ -5,7 +5,6 @@ import com.dormhub.entity.Contract;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.enums.ContractStatus;
-import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
@@ -20,7 +19,6 @@ import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,19 +32,22 @@ public class CheckInOutService {
     private final RoomRepository roomRepository;
     private final RoomAssignmentMapper roomAssignmentMapper;
     private final NotificationService notificationService;
+    private final RoomStatusService roomStatusService;
 
     public CheckInOutService(ContractRepository contractRepository,
                              InvoiceRepository invoiceRepository,
                              RoomAssignmentRepository roomAssignmentRepository,
                              RoomRepository roomRepository,
                              RoomAssignmentMapper roomAssignmentMapper,
-                             NotificationService notificationService) {
+                             NotificationService notificationService,
+                             RoomStatusService roomStatusService) {
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
         this.roomRepository = roomRepository;
         this.roomAssignmentMapper = roomAssignmentMapper;
         this.notificationService = notificationService;
+        this.roomStatusService = roomStatusService;
     }
 
     @Transactional
@@ -62,11 +63,19 @@ public class CheckInOutService {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
                     "Chỉ có thể check-in khi phân phòng đang ASSIGNED");
         }
+        if (assignment.getRoom() != null) {
+            Room roomToCheckIn = roomRepository.findById(assignment.getRoom().getId())
+                    .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+            if (roomToCheckIn.getStatus() == RoomStatus.MAINTENANCE) {
+                throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE,
+                        "Phòng đang bảo trì, không thể check-in");
+            }
+        }
 
         assignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         assignment.setCheckInAt(LocalDateTime.now(BUSINESS_ZONE));
-        roomAssignmentRepository.save(assignment);
-        refreshRoomAvailability(assignment.getRoom().getId());
+        roomAssignmentRepository.saveAndFlush(assignment);
+        roomStatusService.syncOccupancyAndRefreshStatus(assignment.getRoom().getId());
         
         // Send notification after check-in success
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
@@ -102,8 +111,17 @@ public class CheckInOutService {
                         assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY))) {
             throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
         }
+        // Thống nhất 2 đường trả phòng: cọc đang HELD phải được quyết định (hoàn/tịch thu)
+        // qua quy trình CheckoutRequest.complete() — không cho check-out trực tiếp
+        // để cọc không bị kẹt lại trạng thái HELD (P1)
+        if (contract.getDepositStatus() == com.dormhub.entity.enums.DepositStatus.HELD) {
+            throw new AppException(ErrorCode.CHECKOUT_DEPOSIT_ACTION_REQUIRED,
+                    "Hợp đồng còn tiền cọc đang giữ. Hãy hoàn tất qua quy trình yêu cầu trả phòng "
+                            + "(checkout-requests) để chọn hoàn hoặc tịch thu tiền cọc");
+        }
 
         LocalDateTime checkOutAt = LocalDateTime.now(BUSINESS_ZONE);
+        Room roomBeingLeft = assignment.getRoom();
         assignment.setStatus(RoomAssignmentStatus.CHECKED_OUT);
         assignment.setCheckOutAt(checkOutAt);
         roomAssignmentRepository.saveAndFlush(assignment);
@@ -115,7 +133,8 @@ public class CheckInOutService {
                     : ContractStatus.TERMINATED);
             contractRepository.save(contract);
         }
-        refreshRoomAvailability(assignment.getRoom().getId());
+        roomStatusService.syncOccupancyAndRefreshStatus(
+                roomBeingLeft != null ? roomBeingLeft.getId() : assignment.getRoom().getId());
         
         // Send notification after check-out success
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
@@ -143,25 +162,5 @@ public class CheckInOutService {
         return roomAssignmentRepository
                 .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
-    }
-
-    private void refreshRoomAvailability(Long roomId) {
-        Room room = roomRepository.findByIdForUpdate(roomId)
-                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        int activeAssignments = Math.toIntExact(roomAssignmentRepository
-                .countByRoom_IdAndStatusIn(roomId, List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN)));
-        room.setCurrentOccupancy(activeAssignments);
-
-        if (room.getStatus() == RoomStatus.MAINTENANCE) {
-            roomRepository.save(room);
-            return;
-        }
-
-        long heldContracts = contractRepository.countByRoom_IdAndStatusIn(
-                roomId, List.of(ContractStatus.PENDING));
-        room.setStatus(room.getCurrentOccupancy() + heldContracts >= room.getCapacity()
-                ? (heldContracts > 0 ? RoomStatus.RESERVED : RoomStatus.OCCUPIED)
-                : RoomStatus.AVAILABLE);
-        roomRepository.save(room);
     }
 }

@@ -21,8 +21,12 @@ public enum NotificationType {
     // 4. Hóa đơn & Thanh toán (Phạm vi của TV4)
     INVOICE_CREATED,
     INVOICE_DUE_REMINDER,
+    INVOICE_OVERDUE,
     PAYMENT_SUCCESS,
     PAYMENT_FAILED,
+
+    // 6. Hợp đồng sắp hết hạn
+    CONTRACT_EXPIRING,
 
     // 5. Thông báo chung
     GENERAL
