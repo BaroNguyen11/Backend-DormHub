@@ -28,6 +28,7 @@ public class StudentMapper {
                 .email(user != null ? user.getEmail() : null)
                 .fullName(user != null ? user.getFullName() : null)
                 .phone(user != null ? user.getPhone() : null)
+                .phoneNumber(user != null ? user.getPhone() : null)
                 .status(user != null ? user.getStatus() : null)
                 .build();
     }

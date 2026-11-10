@@ -16,6 +16,9 @@ public class MaintenanceCreateRequest {
     @Size(max = 150, message = "Tiêu đề không được vượt quá 150 ký tự")
     private String title;
 
+    @Size(max = 150, message = "Tên thiết bị không được vượt quá 150 ký tự")
+    private String assetName;
+
     @NotBlank(message = "Mô tả chi tiết không được để trống")
     @Size(max = 2000, message = "Mô tả không được vượt quá 2000 ký tự")
     private String description;

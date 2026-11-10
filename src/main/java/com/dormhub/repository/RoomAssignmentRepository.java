@@ -60,6 +60,9 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
     Optional<RoomAssignment> findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
             Long studentId, RoomAssignmentStatus status);
 
+    Optional<RoomAssignment> findFirstByStudent_IdAndStatusInOrderByAssignmentIdDesc(
+            Long studentId, Collection<RoomAssignmentStatus> statuses);
+
     /**
      * Bản có KHÓA biên (PESSIMISTIC_WRITE) của truy vấn phân phòng hiện tại.
      * Dùng cho các luồng check-then-act (tạo yêu cầu chuyển phòng / trả phòng):

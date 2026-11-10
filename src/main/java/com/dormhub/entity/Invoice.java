@@ -72,6 +72,7 @@ public class Invoice {
     @Column(name = "total_amount", nullable = false, precision = 38, scale = 0)
     private BigDecimal totalAmount;
 
-    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, orphanRemoval = true,
+            fetch = FetchType.LAZY)
     private List<InvoiceDetail> details = new ArrayList<>();
 }

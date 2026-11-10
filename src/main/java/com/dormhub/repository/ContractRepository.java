@@ -51,6 +51,10 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
     @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Page<Contract> findAllByStudent_Id(Long studentId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"room", "room.building"})
+    Optional<Contract> findFirstByStudent_IdAndStatusOrderByContractIdDesc(
+            Long studentId, ContractStatus status);
+
     @EntityGraph(attributePaths = {"student", "student.user", "room", "room.building"})
     Page<Contract> findAllByStatus(ContractStatus status, Pageable pageable);
 

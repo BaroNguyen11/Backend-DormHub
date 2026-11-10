@@ -7,6 +7,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -39,6 +41,10 @@ public class Room {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "building_id", nullable = false)
     private Building building;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "room", fetch = FetchType.LAZY)
+    private List<RoomAssignment> roomAssignments = new ArrayList<>();
     
     @Enumerated(EnumType.STRING)
     @Column(name = "room_type", nullable = false, length = 20)

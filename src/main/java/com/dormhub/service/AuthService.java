@@ -66,8 +66,13 @@ public class AuthService {
 
         user.setFullName(request.getFullName().trim());
 
-        String phone = request.getPhone();
+        String phone = request.getPhoneNumber();
         user.setPhone(phone == null || phone.isBlank() ? null : phone.trim());
+
+        String studentCode = request.getStudentCode().trim();
+        if (studentRepository.existsByStudentCode(studentCode)) {
+            throw new AppException(ErrorCode.STUDENT_CODE_ALREADY_EXISTS);
+        }
 
 
         user.setRole(Role.STUDENT);
@@ -77,6 +82,7 @@ public class AuthService {
 
         Student student = new Student();
         student.setUser(savedUser);
+        student.setStudentCode(studentCode);
         studentRepository.save(student);
         // Tạo OTP và lưu hash vào database
         String otp = otpService.createOtp(

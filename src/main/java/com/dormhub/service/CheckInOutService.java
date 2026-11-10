@@ -4,6 +4,7 @@ import com.dormhub.dto.response.RoomAssignmentResponse;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
+import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
@@ -19,6 +20,7 @@ import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,6 +77,9 @@ public class CheckInOutService {
         assignment.setStatus(RoomAssignmentStatus.CHECKED_IN);
         assignment.setCheckInAt(LocalDateTime.now(BUSINESS_ZONE));
         roomAssignmentRepository.saveAndFlush(assignment);
+        if (contract.getStudent() != null) {
+            contract.getStudent().setRoom(assignment.getRoom());
+        }
         roomStatusService.syncOccupancyAndRefreshStatus(assignment.getRoom().getId());
         
         // Send notification after check-in success
@@ -125,6 +130,20 @@ public class CheckInOutService {
         assignment.setStatus(RoomAssignmentStatus.CHECKED_OUT);
         assignment.setCheckOutAt(checkOutAt);
         roomAssignmentRepository.saveAndFlush(assignment);
+
+        if (contract.getStudent() != null) {
+            Student student = contract.getStudent();
+            RoomAssignment remainingAssignment = roomAssignmentRepository
+                    .findFirstByStudent_IdAndStatusInOrderByAssignmentIdDesc(
+                            student.getId(), List.of(
+                                    RoomAssignmentStatus.ACTIVE,
+                                    RoomAssignmentStatus.APPROVED,
+                                    RoomAssignmentStatus.ASSIGNED,
+                                    RoomAssignmentStatus.CHECKED_IN
+                            ))
+                    .orElse(null);
+            student.setRoom(remainingAssignment == null ? null : remainingAssignment.getRoom());
+        }
 
         if (contract.getStatus() != ContractStatus.EXPIRED) {
             contract.setStatus(contract.getEndDate() != null
