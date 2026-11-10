@@ -50,8 +50,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers(PathPatternRequestMatcher.withDefaults().matcher(
-                                HttpMethod.POST, "/api/v1/payments/webhooks/sepay")))
+                        .ignoringRequestMatchers(
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/payments/webhooks/sepay"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/api/v1/auth/**")
+                        )
+                )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .formLogin(AbstractHttpConfigurer::disable)
