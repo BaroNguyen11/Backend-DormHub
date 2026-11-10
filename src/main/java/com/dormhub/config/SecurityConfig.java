@@ -37,7 +37,7 @@ public class SecurityConfig {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
-    @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
+    @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000,https://dorm-hub-s8y9.vercel.app/}")
     private List<String> allowedOrigins;
 
     @Bean
@@ -104,14 +104,11 @@ public class SecurityConfig {
                                 ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/rooms/available", "/api/v1/rooms/*").permitAll()
                         .requestMatchers("/api/v1/notifications/**").authenticated()
-                        // Cấp tài khoản do nhà trường provision: Manager tạo tài khoản SV qua register (BR §4.1)
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
-                        // Tạo/xem hóa đơn toàn hệ thống và tra cứu tính tiền: chỉ Manager (P0 - IDOR)
                         .requestMatchers("/api/v1/invoices/**", "/api/v1/room-monthly-charges/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/contracts", "/api/v1/contracts/**").hasRole("MANAGER")
-                        // Sinh viên chỉ thao tác trong không gian /student/** (hóa đơn riêng có kiểm soát sở hữu)
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
                         .anyRequest().authenticated()
                         )
@@ -123,7 +120,6 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Danh sách origin cho phép đọc từ cấu hình (prod không còn hardcode localhost)
         configuration.setAllowedOriginPatterns(allowedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
