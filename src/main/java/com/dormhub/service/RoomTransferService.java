@@ -282,6 +282,9 @@ public class RoomTransferService {
         contract.setRoom(destinationRoom);
         contract.setMonthlyRent(destinationRoom.getPricePerMonth());
         contractRepository.save(contract);
+        Student student = transferRequest.getStudent();
+        student.setRoom(destinationRoom);
+        studentRepository.save(student);
         transferRequest.setApprovedRoom(destinationRoom);
     }
 

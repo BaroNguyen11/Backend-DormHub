@@ -4,6 +4,8 @@ import com.dormhub.dto.request.MaintenanceCreateRequest;
 import com.dormhub.dto.request.MaintenanceStatusUpdateRequest;
 import com.dormhub.dto.response.MaintenanceResponse;
 import com.dormhub.entity.MaintenanceRequest;
+import com.dormhub.entity.Contract;
+import com.dormhub.entity.DormApplication;
 import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
@@ -11,6 +13,8 @@ import com.dormhub.entity.User;
 import com.dormhub.entity.enums.MaintenancePriority;
 import com.dormhub.entity.enums.MaintenanceStatus;
 import com.dormhub.entity.enums.MaintenanceType;
+import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DormApplicationStatus;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.Role;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
@@ -19,6 +23,8 @@ import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.MaintenanceMapper;
 import com.dormhub.repository.MaintenanceRepository;
+import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
@@ -45,6 +51,8 @@ public class MaintenanceService {
 
     private final MaintenanceRepository maintenanceRepository;
     private final StudentRepository studentRepository;
+    private final ContractRepository contractRepository;
+    private final DormApplicationRepository dormApplicationRepository;
     private final RoomRepository roomRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
     private final UserRepository userRepository;
@@ -57,21 +65,55 @@ public class MaintenanceService {
                 new AppException(ErrorCode.STUDENT_NOT_FOUND));
     }
 
-    // 1. Sinh viên tạo yêu cầu báo hỏng — roomId tự suy từ phân phòng ACTIVE,
-    //    KHÔNG tin roomId client gửi lên (P0: chặn báo hỏng "hộ" phòng khác)
+    // 1. Sinh viên tạo yêu cầu báo hỏng — suy phòng từ phân phòng hiện tại/gần nhất,
+    //    KHÔNG tin roomId client gửi lên (chặn báo hỏng "hộ" phòng khác).
     @Transactional
     public MaintenanceResponse create(MaintenanceCreateRequest request, Long userId) {
         Student student = getStudentByUserId(userId);
 
-        RoomAssignment currentAssignment = roomAssignmentRepository
-                .findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
-                        student.getId(), RoomAssignmentStatus.CHECKED_IN)
-                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_IN_ANY_ROOM,
-                        "Bạn hiện không đang ở phòng nào nên không thể tạo báo hỏng"));
-        Room room = currentAssignment.getRoom();
+        Room room = student.getRoom();
+
+        if (room == null) {
+            room = roomAssignmentRepository
+                    .findFirstByStudent_IdAndStatusInOrderByAssignmentIdDesc(
+                            student.getId(), List.of(
+                                    RoomAssignmentStatus.ACTIVE,
+                                    RoomAssignmentStatus.APPROVED,
+                                    RoomAssignmentStatus.ASSIGNED,
+                                    RoomAssignmentStatus.CHECKED_IN
+                            ))
+                    .map(RoomAssignment::getRoom)
+                    .orElse(null);
+        }
+
+        if (room == null) {
+            room = dormApplicationRepository
+                    .findFirstByStudent_IdAndStatusOrderByIdDesc(
+                            student.getId(), DormApplicationStatus.APPROVED)
+                    .map(DormApplication::getRequestedRoom)
+                    .orElse(null);
+        }
+
+        if (room == null) {
+            room = contractRepository
+                    .findFirstByStudent_IdAndStatusOrderByContractIdDesc(
+                            student.getId(), ContractStatus.ACTIVE)
+                    .map(Contract::getRoom)
+                    .orElse(null);
+        }
+
+        if (room == null) {
+            throw new AppException(ErrorCode.STUDENT_NOT_IN_ANY_ROOM,
+                    "Bạn hiện không đang ở phòng nào nên không thể tạo báo hỏng");
+        }
+        student.setRoom(room);
+        studentRepository.save(student);
+        String requestTitle = request.getAssetName() != null && !request.getAssetName().isBlank()
+                ? request.getAssetName()
+                : request.getTitle();
 
         MaintenanceRequest maintenance = MaintenanceRequest.builder()
-                .title(request.getTitle().trim())
+                .title(requestTitle.trim())
                 .description(request.getDescription().trim())
                 .priority(request.getPriority())
                 .type(request.getType())

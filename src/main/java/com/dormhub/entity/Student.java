@@ -66,6 +66,11 @@ public class Student {
     @JoinColumn(name = "user_id",unique = true,nullable = false,   foreignKey = @ForeignKey(name = "fk_students_user"))
     private User user;
 
+    // Current room cache synchronized from assignment and contract workflows.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "room_id", foreignKey = @ForeignKey(name = "fk_students_current_room"))
+    private Room room;
+
     @PrePersist
     protected void onCreate() {
         LocalDateTime now = LocalDateTime.now();

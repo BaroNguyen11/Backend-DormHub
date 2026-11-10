@@ -1,8 +1,10 @@
 package com.dormhub.dto.request;
 
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,5 +31,12 @@ public class RegisterRequest {
     @Size(max = 100, message = "Họ tên tối đa 100 ký tự")
     private String fullName;
 
-    private String phone;
+    @JsonAlias("phone")
+    @Pattern(regexp = "^(0|\\+84)(3|5|7|8|9)[0-9]{8}$",
+            message = "Số điện thoại không hợp lệ")
+    private String phoneNumber;
+
+    @NotBlank(message = "Mã sinh viên không được để trống")
+    @Pattern(regexp = "^[0-9]{8}$", message = "Mã sinh viên phải gồm đúng 8 chữ số")
+    private String studentCode;
 }

@@ -19,6 +19,7 @@ public class StudentProfileResponse {
     private final String address;
     private final String avatarUrl;
     private final String phone;
+    private final String phoneNumber;
     private final String cic;
     private final String username;
     private final String email;

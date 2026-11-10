@@ -128,6 +128,8 @@ public class RoomAssignmentService {
         assignment.setAssignedBy(approver);
         assignment.setStatus(RoomAssignmentStatus.ASSIGNED);
         RoomAssignment savedAssignment = roomAssignmentRepository.saveAndFlush(assignment);
+        student.setRoom(room);
+        studentRepository.save(student);
 
         // Đồng bộ occupancy + trạng thái phòng qua hàm chuẩn duy nhất (P0)
         roomStatusService.syncOccupancyAndRefreshStatus(room.getId());

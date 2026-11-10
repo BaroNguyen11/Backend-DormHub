@@ -25,6 +25,10 @@ public interface DormApplicationRepository extends JpaRepository<DormApplication
     @EntityGraph(attributePaths = {"student.user", "requestedRoom.building"})
     Optional<DormApplication> findByIdAndStudentId(Long id, Long studentId);
 
+    @EntityGraph(attributePaths = {"requestedRoom", "requestedRoom.building"})
+    Optional<DormApplication> findFirstByStudent_IdAndStatusOrderByIdDesc(
+            Long studentId, DormApplicationStatus status);
+
     @Override
     @EntityGraph(attributePaths = {"student.user", "requestedRoom.building"})
     Page<DormApplication> findAll(Pageable pageable);

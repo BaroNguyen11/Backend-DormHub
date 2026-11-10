@@ -2,6 +2,11 @@ spring:
   config:
     import: optional:file:.env[.properties]
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -11,21 +16,6 @@ spring:
       maximum-pool-size: 5
       minimum-idle: 1
 
-  ai:
-    ollama:
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-      embedding:
-        model: qwen3-embedding:0.6b
-    vectorstore:
-      pgvector:
-        schema-name: public
-        initialize-schema: false
-        remove-existing-vector-store-table: false
-        table-name: dormhub_room_vectors
-        dimensions: 1024
-        distance-type: COSINE_DISTANCE
-        index-type: NONE
-
   jpa:
     hibernate:
       ddl-auto: update
@@ -33,6 +23,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        generate_statistics: true
 
   mail:
     host: smtp.gmail.com
@@ -46,22 +37,40 @@ spring:
           starttls:
             enable: true
 
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:}
+  api-key: ${CLOUDINARY_API_KEY:}
+  api-secret: ${CLOUDINARY_API_SECRET:}
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
+    org.hibernate.stat: DEBUG
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: DEBUG
+
 
 dormhub:
+  jwt:
+    secret: ${DORMHUB_JWT_SECRET}
+    access-token-minutes: 15
+    cookie-secure: ${DORMHUB_COOKIE_SECURE:false}
+
+  sepay:
+    api-key: ${DORMHUB_SEPAY_API_KEY:}
+    webhook-secret: ${DORMHUB_SEPAY_WEBHOOK_SECRET:}
+    sync-min-interval-seconds: 10
+    transactions:
+      enabled: true
+      url: https://my.sepay.vn/userapi/transactions/list
+      account-number: ${DORMHUB_SEPAY_ACCOUNT_NUMBER:}
+      limit: 30
+      timeout-seconds: 5
+
   payment:
-    test-bank-code: ${DORMHUB_PAYMENT_TEST_BANK_CODE:}
+    test-bank-code: ${DORMHUB_PAYMENT_TEST_BANK_CODE:ACB}
     test-account-number: ${DORMHUB_PAYMENT_TEST_ACCOUNT_NUMBER:}
     reference-prefix: ${DORMHUB_PAYMENT_REFERENCE_PREFIX:DH}
     reference-suffix-length: ${DORMHUB_PAYMENT_REFERENCE_SUFFIX_LENGTH:12}
     reference-character-type: ${DORMHUB_PAYMENT_REFERENCE_CHARACTER_TYPE:ALPHANUMERIC}
     ttl-minutes: ${DORMHUB_PAYMENT_TTL_MINUTES:15}
     qr-template: ${DORMHUB_PAYMENT_QR_TEMPLATE:compact}
-  sepay:
-    webhook-secret: ${DORMHUB_SEPAY_WEBHOOK_SECRET:}
-  jwt:
-    secret: ${DORMHUB_JWT_SECRET}
-    access-token-minutes: 15
-    cookie-secure: ${DORMHUB_COOKIE_SECURE:false}

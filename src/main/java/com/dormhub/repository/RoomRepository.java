@@ -16,6 +16,14 @@ import java.util.Optional;
 
 @Repository
 public interface RoomRepository extends JpaRepository<Room, Long>, JpaSpecificationExecutor<Room> {
+    @Query("select distinct room from Room room "
+            + "left join fetch room.building "
+            + "left join fetch room.roomAssignments assignment "
+            + "left join fetch assignment.student student "
+            + "left join fetch student.user "
+            + "where room.id = :id")
+    Optional<Room> findDetailById(@Param("id") Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select room from Room room where room.id = :id")
     Optional<Room> findByIdForUpdate(@Param("id") Long id);

@@ -74,7 +74,8 @@ public class RoomService {
     }
 
     public RoomResponse getRoomById(Long id) {
-        Room room = findRoom(id);
+        Room room = roomRepository.findDetailById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
     }
 
@@ -227,11 +228,6 @@ public class RoomService {
             throw new AppException(ErrorCode.INVALID_REQUEST,
                     "Kích thước trang phải từ 1 đến " + MAX_PAGE_SIZE);
         }
-    }
-
-    private Room findRoom(Long id) {
-        return roomRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
     }
 
     private Building findBuilding(Long id) {
