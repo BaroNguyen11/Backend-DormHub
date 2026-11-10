@@ -7,6 +7,8 @@ import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
+import com.dormhub.exception.AppException;
+import com.dormhub.exception.ErrorCode;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.service.NotificationService;
 import jakarta.validation.Valid;
@@ -69,7 +71,7 @@ public class NotificationController {
     }
 
     // 5. [MANAGER] Gửi thông báo cho sinh viên
-    @PostMapping("/manager/notifications")
+    @PostMapping("/send-to-students")
     @PreAuthorize("hasRole('MANAGER')")
     public ResponseEntity<ApiResponse<Void>> createNotification(
             @Valid @RequestBody NotificationCreateRequest request,
@@ -90,18 +92,29 @@ public class NotificationController {
             );
         }
 
-        // Send notifications using NotificationService
-        for (Student student : targetStudents) {
-            notificationService.sendNotification(
-                    student.getUser().getId(),
-                    request.getTitle(),
-                    request.getBody(),
-                    NotificationType.GENERAL
-            );
+        // A student may have multiple active assignment rows; keep one receiver per user.
+        List<Long> uniqueUserIds = targetStudents.stream()
+                .map(Student::getUser)
+                .filter(java.util.Objects::nonNull)
+                .map(User::getId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (uniqueUserIds.isEmpty()) {
+            throw new AppException(ErrorCode.NO_STUDENTS_FOUND);
         }
 
+        notificationService.sendNotification(
+                NotificationType.GENERAL,
+                request.getTitle(),
+                request.getBody(),
+                null,
+                uniqueUserIds
+        );
+
         return ResponseEntity.ok(ApiResponse.success(
-                "Đã gửi thông báo đến " + targetStudents.size() + " sinh viên",
+                "Đã gửi thông báo đến " + uniqueUserIds.size() + " sinh viên",
                 null
         ));
     }
