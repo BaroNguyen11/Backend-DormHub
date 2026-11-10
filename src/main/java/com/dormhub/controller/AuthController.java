@@ -67,7 +67,7 @@ public class AuthController {
                 )
         );
     }
-    @Value("${dormhub.jwt.cookie-secure:false}")
+    @Value("${dormhub.jwt.cookie-secure:true}")
     private boolean cookieSecure;
 
     @Value("${dormhub.jwt.access-token-minutes}")
@@ -91,18 +91,18 @@ public class AuthController {
         ResponseCookie accessCookie = ResponseCookie
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
+                .sameSite("None")
                 .secure(cookieSecure)
                 .path("/")
                 .maxAge(Duration.ofMinutes(accessTokenMinutes))
-                .sameSite("Lax")
                 .build();
         ResponseCookie refreshCookie = ResponseCookie
                 .from("refresh_token", result.getRefreshToken())
                 .httpOnly(true)
+                .sameSite("None")
                 .secure(cookieSecure)
                 .path("/api/v1/auth")
                 .maxAge(Duration.ofDays(7))
-                .sameSite("Lax")
                 .build();
 
         return ResponseEntity.ok()
@@ -178,19 +178,19 @@ public class AuthController {
                 .from("access_token", "")
                 .httpOnly(true)
                 .secure(cookieSecure)
+                .sameSite("None")
                 .path("/")
                 .maxAge(Duration.ZERO)
-                .sameSite("Lax")
                 .build();
 
         // Xóa refresh token cookie
         ResponseCookie clearedRefreshCookie = ResponseCookie
                 .from("refresh_token", "")
                 .httpOnly(true)
+                .sameSite("None")
                 .secure(cookieSecure)
                 .path("/api/v1/auth")
                 .maxAge(Duration.ZERO)
-                .sameSite("Lax")
                 .build();
 
         return ResponseEntity.ok()
@@ -219,18 +219,18 @@ public class AuthController {
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
                 .secure(cookieSecure)
+                .sameSite("None")
                 .path("/")
                 .maxAge(Duration.ofMinutes(accessTokenMinutes))
-                .sameSite("Lax")
                 .build();
 
         ResponseCookie refreshCookie = ResponseCookie
                 .from("refresh_token", result.getRefreshToken())
                 .httpOnly(true)
                 .secure(cookieSecure)
+                .sameSite("None")
                 .path("/api/v1/auth")
                 .maxAge(Duration.ofDays(7))
-                .sameSite("Lax")
                 .build();
 
         return ResponseEntity.ok()
