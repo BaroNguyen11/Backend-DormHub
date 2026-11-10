@@ -12,7 +12,6 @@ import com.dormhub.repository.NotificationReceiverRepository;
 import com.dormhub.repository.NotificationRepository;
 import com.dormhub.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,7 +22,6 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
@@ -41,43 +39,36 @@ public class NotificationService {
 
     /**
      * Gửi thông báo cho nhiều người dùng cùng lúc (Ví dụ: thông báo toàn phòng, toàn tòa).
-     * BR §17.5: lỗi khi gửi thông báo KHÔNG được làm sai trạng thái nghiệp vụ —
-     * mọi lỗi được ghi log thay vì ném ra làm rollback nghiệp vụ gọi nó.
+     * Persistence errors propagate so the surrounding transaction can roll back.
      */
     @Transactional
     public void sendNotification(NotificationType type, String title, String body, Long refId, List<Long> receiverUserIds) {
-        try {
-            if (receiverUserIds == null || receiverUserIds.isEmpty()) {
-                return;
-            }
-
-            // 1. Tạo Notification chung
-            Notification notification = Notification.builder()
-                    .type(type)
-                    .title(title)
-                    .body(body)
-                    .refId(refId)
-                    .build();
-            Notification savedNotification = notificationRepository.save(notification);
-
-            // 2. Tìm danh sách User nhận
-            List<User> receivers = userRepository.findAllById(receiverUserIds);
-
-            // 3. Tạo bản ghi NotificationReceiver cho từng User
-            List<NotificationReceiver> receiverRecords = receivers.stream()
-                    .map(user -> NotificationReceiver.builder()
-                            .notification(savedNotification)
-                            .user(user)
-                            .isRead(false)
-                            .build())
-                    .toList();
-
-            notificationReceiverRepository.saveAll(receiverRecords);
-            log.info("Đã gửi thông báo [{}] đến {} người dùng.", type, receiverRecords.size());
-        } catch (RuntimeException e) {
-            log.error("Gửi thông báo thất bại (không ảnh hưởng nghiệp vụ): type={}, refId={}, error={}",
-                    type, refId, e.getMessage());
+        if (receiverUserIds == null || receiverUserIds.isEmpty()) {
+            return;
         }
+
+        // 1. Tạo một Notification chung cho toàn bộ đợt gửi.
+        Notification notification = Notification.builder()
+                .type(type)
+                .title(title)
+                .body(body)
+                .refId(refId)
+                .build();
+        Notification savedNotification = notificationRepository.save(notification);
+
+        // 2. Tìm danh sách User nhận
+        List<User> receivers = userRepository.findAllById(receiverUserIds);
+
+        // 3. Tạo bản ghi NotificationReceiver cho từng User
+        List<NotificationReceiver> receiverRecords = receivers.stream()
+                .map(user -> NotificationReceiver.builder()
+                        .notification(savedNotification)
+                        .user(user)
+                        .isRead(false)
+                        .build())
+                .toList();
+
+        notificationReceiverRepository.saveAll(receiverRecords);
     }
 
     /**

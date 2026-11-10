@@ -37,7 +37,7 @@ public class SecurityConfig {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
 
-    @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000,https://dorm-hub-s8y9.vercel.app/}")
+    @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000,https://dorm-hub-s8y9.vercel.app}")
     private List<String> allowedOrigins;
 
     @Bean
@@ -106,13 +106,13 @@ public class SecurityConfig {
                                         "/api/v1/auth/refresh"
                                 ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/rooms/available", "/api/v1/rooms/*").permitAll()
-                        .requestMatchers("/api/v1/notifications/**").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
                         .requestMatchers("/api/v1/invoices/**", "/api/v1/room-monthly-charges/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/contracts", "/api/v1/contracts/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
+                        .requestMatchers("/api/v1/notifications/**").authenticated()
                         .anyRequest().authenticated()
                         )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
@@ -123,7 +123,12 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOriginPatterns(allowedOrigins);
+        List<String> normalizedOrigins = allowedOrigins.stream()
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .map(origin -> origin.replaceAll("/+$", ""))
+                .toList();
+        configuration.setAllowedOriginPatterns(normalizedOrigins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);

@@ -88,6 +88,7 @@ public enum ErrorCode {
     MAINTENANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu sửa chữa"),
     STUDENT_NOT_IN_ANY_ROOM(HttpStatus.CONFLICT, "Sinh viên hiện không đang ở phòng nào"),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy thông báo"),
+    NO_STUDENTS_FOUND(HttpStatus.BAD_REQUEST, "Không tìm thấy sinh viên nào đang hoạt động trong tòa nhà này!"),
     ROOM_ASSIGNMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phân phòng hiện tại của hợp đồng"),
     ROOM_ASSIGNMENT_INVALID_STATUS(HttpStatus.CONFLICT, "Trạng thái phân phòng không cho phép thao tác này"),
     CONTRACT_HAS_UNPAID_INVOICES(HttpStatus.CONFLICT, "Hợp đồng còn hóa đơn chưa thanh toán"),
