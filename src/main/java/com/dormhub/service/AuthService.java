@@ -9,6 +9,7 @@ import com.dormhub.entity.EmailVerification;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.OtpPurpose;
+import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.Role;
 import com.dormhub.entity.enums.UserStatus;
 import com.dormhub.exception.AppException;
@@ -44,6 +45,10 @@ public class AuthService {
     private final JwtService jwtService;
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
+
+        if (request.getGender() != Gender.MALE && request.getGender() != Gender.FEMALE) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Giới tính phải là Nam hoặc Nữ");
+        }
 
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
 
@@ -83,18 +88,9 @@ public class AuthService {
         Student student = new Student();
         student.setUser(savedUser);
         student.setStudentCode(studentCode);
+        student.setGender(request.getGender());
         studentRepository.save(student);
-        // Tạo OTP và lưu hash vào database
-        String otp = otpService.createOtp(
-                savedUser,
-                OtpPurpose.REGISTER
-        );
 
-        // Gửi OTP đến email đăng ký
-        emailService.sendVerificationOtp(
-                savedUser.getEmail(),
-                otp
-        );
         return new RegisterResponse(
                 savedUser.getId(),
                 savedUser.getUsername(),

@@ -2,8 +2,10 @@ package com.dormhub.dto.request;
 
 
 import com.fasterxml.jackson.annotation.JsonAlias;
+import com.dormhub.entity.enums.Gender;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
@@ -39,4 +41,7 @@ public class RegisterRequest {
     @NotBlank(message = "Mã sinh viên không được để trống")
     @Pattern(regexp = "^[0-9]{8}$", message = "Mã sinh viên phải gồm đúng 8 chữ số")
     private String studentCode;
+
+    @NotNull(message = "Giới tính không được để trống")
+    private Gender gender;
 }
