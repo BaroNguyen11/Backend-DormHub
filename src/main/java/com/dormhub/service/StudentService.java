@@ -84,6 +84,9 @@ public class StudentService {
             student.getUser().setPhone(request.getPhone());
         }
         if (request.getCic() != null) {
+            if (studentRepository.existsByCicAndIdNot(request.getCic(), student.getId())) {
+                throw new AppException(ErrorCode.STUDENT_CIC_ALREADY_EXISTS);
+            }
             student.setCic(request.getCic());
         }
 

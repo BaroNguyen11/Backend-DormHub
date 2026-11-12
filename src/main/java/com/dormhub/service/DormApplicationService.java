@@ -291,6 +291,10 @@ public class DormApplicationService {
     }
 
     private void validateStudentProfile(Student student) {
+        if (student.getCic() == null || !student.getCic().matches("[0-9]{12}")) {
+            throw new AppException(ErrorCode.STUDENT_PROFILE_INCOMPLETE,
+                    "Cần bổ sung CCCD gồm đúng 12 chữ số trước khi đăng ký phòng");
+        }
         if (!StringUtils.hasText(student.getStudentCode())
                 || student.getDateOfBirth() == null
                 || !StringUtils.hasText(student.getAddress())) {
