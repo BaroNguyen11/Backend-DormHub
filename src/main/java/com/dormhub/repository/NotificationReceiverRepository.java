@@ -12,9 +12,24 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 
 @Repository
 public interface NotificationReceiverRepository extends JpaRepository<NotificationReceiver, Long> {
+
+    @EntityGraph(attributePaths = {"notification"})
+    @Query("select receiver from NotificationReceiver receiver where receiver.user.id = :userId "
+            + "and (:unreadOnly = false or receiver.isRead = false) "
+            + "and (:search = '' or lower(receiver.notification.title) like lower(concat('%', :search, '%')) "
+            + "or lower(receiver.notification.body) like lower(concat('%', :search, '%'))) "
+            + "order by receiver.notification.createdAt desc, receiver.id desc")
+    Page<NotificationReceiver> searchForUser(@Param("userId") Long userId,
+            @Param("unreadOnly") boolean unreadOnly, @Param("search") String search, Pageable pageable);
+
+    long countByNotification_Id(Long notificationId);
+
+    @EntityGraph(attributePaths = {"user", "user.student"})
+    List<NotificationReceiver> findAllByNotification_IdOrderByIdAsc(Long notificationId);
 
     // Danh sách tất cả thông báo của User (fetch kèm notification để chống N+1)
     @EntityGraph(attributePaths = {"notification"})

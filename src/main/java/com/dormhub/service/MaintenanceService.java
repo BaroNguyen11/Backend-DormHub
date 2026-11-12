@@ -151,11 +151,22 @@ public class MaintenanceService {
 
     // 2. Sinh viên xem danh sách yêu cầu của mình (có phân trang)
     @Transactional(readOnly = true)
-    public Page<MaintenanceResponse> getMyRequests(Long userId, int page, int size) {
+    public Page<MaintenanceResponse> getMyRequests(Long userId, String search,
+            MaintenanceStatus status, int page, int size) {
         validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return maintenanceRepository.findAllByStudent_Id(student.getId(), pageable)
+        String query = search == null ? "" : search.trim().toLowerCase(java.util.Locale.ROOT);
+        Specification<MaintenanceRequest> spec = (root, ignored, cb) -> {
+            var owner = cb.equal(root.get("student").get("id"), student.getId());
+            var statusMatch = status == null ? cb.conjunction()
+                    : cb.equal(root.get("maintenanceStatus"), status);
+            var textMatch = query.isEmpty() ? cb.conjunction()
+                    : cb.or(cb.like(cb.lower(root.get("title")), "%" + query + "%"),
+                            cb.like(cb.lower(root.get("description")), "%" + query + "%"));
+            return cb.and(owner, statusMatch, textMatch);
+        };
+        return maintenanceRepository.findAll(spec, pageable)
                 .map(maintenanceMapper::toResponse);
     }
 

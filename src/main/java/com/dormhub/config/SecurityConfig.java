@@ -112,6 +112,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/manager/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/contracts", "/api/v1/contracts/**").hasRole("MANAGER")
                         .requestMatchers("/api/v1/student/**").hasRole("STUDENT")
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/notifications/manager-history",
+                                "/api/v1/notifications/manager-history/**").hasRole("MANAGER")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/notifications/send-to-students").hasRole("MANAGER")
                         .requestMatchers("/api/v1/notifications/**").authenticated()
                         .anyRequest().authenticated()
                         )

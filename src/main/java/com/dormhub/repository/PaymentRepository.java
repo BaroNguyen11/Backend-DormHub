@@ -15,6 +15,20 @@ import org.springframework.data.repository.query.Param;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
+    @Query(value = """
+            select p.* from payments p where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                or cast(p.payment_id as text) like concat('%', :search, '%')
+                or cast(p.invoice_id as text) like concat('%', :search, '%'))
+            """, countQuery = """
+            select count(*) from payments p where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                or cast(p.payment_id as text) like concat('%', :search, '%')
+                or cast(p.invoice_id as text) like concat('%', :search, '%'))
+            """, nativeQuery = true)
+    Page<Payment> findManagerHistory(@Param("status") String status,
+            @Param("search") String search, Pageable pageable);
+
     Optional<Payment> findByPaymentReference(String paymentReference);
 
     List<Payment> findAllByInvoice_InvoiceIdOrderByCreatedAtDesc(Long invoiceId);
@@ -25,6 +39,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             left join contracts c on c.contract_id = i.contract_id
             left join students owner on owner.id = c.student_id
             where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                   or cast(p.payment_id as text) like concat('%', :search, '%')
+                   or cast(i.invoice_id as text) like concat('%', :search, '%'))
               and ((i.invoice_type in ('ROOM_FEE', 'DEPOSIT') and owner.user_id = :userId)
                 or (i.invoice_type = 'UTILITY' and i.room_id is not null
                   and i.billing_month is not null and exists (
@@ -42,6 +59,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             left join contracts c on c.contract_id = i.contract_id
             left join students owner on owner.id = c.student_id
             where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                   or cast(p.payment_id as text) like concat('%', :search, '%')
+                   or cast(i.invoice_id as text) like concat('%', :search, '%'))
               and ((i.invoice_type in ('ROOM_FEE', 'DEPOSIT') and owner.user_id = :userId)
                 or (i.invoice_type = 'UTILITY' and i.room_id is not null
                   and i.billing_month is not null and exists (
@@ -53,7 +73,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                       and (a.check_out_at is null or a.check_out_at > i.billing_month))))
             """, nativeQuery = true)
     Page<Payment> findHistoryForStudent(@Param("userId") Long userId,
-            @Param("status") String status, Pageable pageable);
+            @Param("status") String status, @Param("search") String search, Pageable pageable);
 
     Optional<Payment> findFirstByInvoice_InvoiceIdAndStatusOrderByCreatedAtDesc(
             Long invoiceId, PaymentStatus status);

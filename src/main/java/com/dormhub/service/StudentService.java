@@ -97,6 +97,7 @@ public class StudentService {
     public Page<StudentProfileResponse> searchStudent(
             String name,
             String studentCode,
+            UserStatus status,
             int page,
             int size,
             String sortBy,
@@ -132,6 +133,9 @@ public class StudentService {
         // 5. Kết hợp Specification tìm kiếm
         Specification<Student> spec = StudentSpecification.hasName(name).
                 and(StudentSpecification.hasStudentCode(studentCode));
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("user").get("status"), status));
+        }
         // 6. Truy vấn và map sang Response
         Page<Student> students = studentRepository.findAll(spec, pageable);
         return students.map(studentMapper::toResponse);

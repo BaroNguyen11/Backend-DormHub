@@ -129,14 +129,15 @@ public class PaymentService {
     }
 
     @Transactional(readOnly = true)
-    public Page<StudentPaymentHistoryResponse> history(User currentUser, PaymentStatus status,
+    public Page<StudentPaymentHistoryResponse> history(User currentUser, PaymentStatus status, String search,
                                                         int page, int size) {
         requireUser(currentUser);
         if (page < 0 || size < 1 || size > 100) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
         return paymentRepository.findHistoryForStudent(currentUser.getId(),
-                        status == null ? "" : status.name(), PageRequest.of(page, size))
+                        status == null ? "" : status.name(), search == null ? "" : search.trim(),
+                        PageRequest.of(page, size))
                 .map(payment -> new StudentPaymentHistoryResponse(
                         payment.getPaymentId(), payment.getInvoice().getInvoiceId(),
                         payment.getInvoice().getInvoiceType(), payment.getPaymentReference(),

@@ -3,6 +3,8 @@ package com.dormhub.controller;
 import com.dormhub.dto.request.NotificationCreateRequest;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.NotificationResponse;
+import com.dormhub.dto.response.ManagerNotificationSummaryResponse;
+import com.dormhub.dto.response.ManagerNotificationDetailResponse;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.NotificationType;
@@ -30,15 +32,34 @@ public class NotificationController {
     private final NotificationService notificationService;
     private final RoomAssignmentRepository roomAssignmentRepository;
 
+    @GetMapping("/manager-history")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<Page<ManagerNotificationSummaryResponse>>> getManagerHistory(
+            @RequestParam(defaultValue = "") String search,
+            @RequestParam(defaultValue = "") String target,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success(
+                notificationService.getManagerHistory(search, target, page, size)));
+    }
+
+    @GetMapping("/manager-history/{id}")
+    @PreAuthorize("hasRole('MANAGER')")
+    public ResponseEntity<ApiResponse<ManagerNotificationDetailResponse>> getManagerHistoryDetail(
+            @PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(notificationService.getManagerHistoryDetail(id)));
+    }
+
     // 1. Lấy danh sách thông báo (hỗ trợ lọc chưa đọc: ?unreadOnly=true)
     @GetMapping
     public ResponseEntity<ApiResponse<Page<NotificationResponse>>> getMyNotifications(
             @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "false") boolean unreadOnly,
+            @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        Page<NotificationResponse> result = notificationService.getMyNotifications(user.getId(), unreadOnly, page, size);
+        Page<NotificationResponse> result = notificationService.getMyNotifications(user.getId(), unreadOnly, search, page, size);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách thông báo thành công", result));
     }
 
@@ -106,10 +127,10 @@ public class NotificationController {
         }
 
         notificationService.sendNotification(
-                NotificationType.GENERAL,
+                NotificationType.MANAGER_ANNOUNCEMENT,
                 request.getTitle(),
                 request.getBody(),
-                null,
+                request.getBuildingId(),
                 uniqueUserIds
         );
 

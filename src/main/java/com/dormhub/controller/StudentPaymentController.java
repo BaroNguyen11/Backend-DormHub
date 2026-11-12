@@ -56,11 +56,12 @@ public class StudentPaymentController {
     @GetMapping("/payments")
     public ResponseEntity<ApiResponse<Page<StudentPaymentHistoryResponse>>> history(
             @RequestParam(required = false) PaymentStatus status,
+            @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(ApiResponse.success(
-                paymentService.history(currentUser, status, page, size)));
+                paymentService.history(currentUser, status, search, page, size)));
     }
 
     /**
