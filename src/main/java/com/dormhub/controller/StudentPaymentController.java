@@ -3,6 +3,8 @@ package com.dormhub.controller;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.PaymentSyncResponse;
 import com.dormhub.dto.response.StudentPaymentResponse;
+import com.dormhub.dto.response.StudentPaymentHistoryResponse;
+import com.dormhub.entity.enums.PaymentStatus;
 import com.dormhub.entity.User;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -10,6 +12,7 @@ import com.dormhub.service.PaymentService;
 import com.dormhub.service.SepayPaymentSyncService;
 import java.net.URI;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -48,6 +51,16 @@ public class StudentPaymentController {
     public ResponseEntity<ApiResponse<StudentPaymentResponse>> get(
             @PathVariable Long paymentId, @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(ApiResponse.success(paymentService.get(paymentId, currentUser)));
+    }
+
+    @GetMapping("/payments")
+    public ResponseEntity<ApiResponse<Page<StudentPaymentHistoryResponse>>> history(
+            @RequestParam(required = false) PaymentStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(ApiResponse.success(
+                paymentService.history(currentUser, status, page, size)));
     }
 
     /**

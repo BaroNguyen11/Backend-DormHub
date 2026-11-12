@@ -24,8 +24,7 @@ import org.springframework.stereotype.Component;
  * <p>Vẫn giữ tuỳ chọn HMAC legacy ({@code X-SePay-Signature} +
  * {@code X-SePay-Timestamp}) cho script simulate kiểm thử ở môi trường dev.</p>
  *
- * <p>Nếu chưa cấu hình api-key, hệ thống chạy chế độ dev: chấp nhận request
- * (kèm log cảnh báo) để thanh toán không bị kẹt PENDING chỉ vì thiếu cấu hình.</p>
+ * <p>Thiếu api-key thì webhook bị từ chối; không có chế độ bỏ qua xác thực.</p>
  */
 @Component
 public class SepayWebhookSignatureVerifier {
@@ -48,19 +47,21 @@ public class SepayWebhookSignatureVerifier {
     public boolean verify(String authorization, String signature, String timestamp, byte[] rawBody) {
         String apiKey = properties.getApiKey();
         boolean apiKeyConfigured = apiKey != null && !apiKey.isBlank();
+        if (!apiKeyConfigured) {
+            return false;
+        }
 
         // 1) Chuẩn SePay: Authorization: Apikey <API_KEY>
         if (apiKeyConfigured && matchesApiKey(authorization, apiKey.trim())) {
             return true;
         }
 
-        // 2) HMAC legacy (chỉ hợp lệ khi đã cấu hình webhook-secret)
+        // 2) HMAC legacy (chỉ hợp lệ khi đã cấu hình cả api-key và webhook-secret)
         if (verifyLegacyHmac(signature, timestamp, rawBody)) {
             return true;
         }
 
-        // 3) Dev mode: chưa cấu hình api-key thì bỏ qua xác thực để không kẹt luồng thanh toán.
-        return !apiKeyConfigured;
+        return false;
     }
 
     /** So sánh hằng thời gian giữa "Apikey <gửi>" và khóa đã cấu hình. */

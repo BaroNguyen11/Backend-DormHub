@@ -2,6 +2,7 @@ package com.dormhub.service;
 
 import com.dormhub.config.PaymentQrProperties;
 import com.dormhub.dto.response.StudentPaymentResponse;
+import com.dormhub.dto.response.StudentPaymentHistoryResponse;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.Invoice;
 import com.dormhub.entity.Payment;
@@ -23,6 +24,8 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import org.springframework.stereotype.Service;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -125,6 +128,26 @@ public class PaymentService {
         return toResponse(payment, invoice, Instant.now());
     }
 
+    @Transactional(readOnly = true)
+    public Page<StudentPaymentHistoryResponse> history(User currentUser, PaymentStatus status,
+                                                        int page, int size) {
+        requireUser(currentUser);
+        if (page < 0 || size < 1 || size > 100) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        return paymentRepository.findHistoryForStudent(currentUser.getId(),
+                        status == null ? "" : status.name(), PageRequest.of(page, size))
+                .map(payment -> new StudentPaymentHistoryResponse(
+                        payment.getPaymentId(), payment.getInvoice().getInvoiceId(),
+                        payment.getInvoice().getInvoiceType(), payment.getPaymentReference(),
+                        payment.getExpectedAmount(), payment.getStatus(),
+                        payment.getInvoice().getStatus(), payment.getCreatedAt(),
+                        payment.getExpiresAt(), payment.getPaidAt(),
+                        payment.getStatus() == PaymentStatus.EXPIRED
+                                || (payment.getStatus() == PaymentStatus.PENDING
+                                    && !payment.getExpiresAt().isAfter(Instant.now()))));
+    }
+
     private void requireUser(User currentUser) {
         if (currentUser == null || currentUser.getId() == null) {
             throw new AppException(ErrorCode.UNAUTHORIZED);
@@ -175,13 +198,14 @@ public class PaymentService {
     private StudentPaymentResponse toResponse(Payment payment, Invoice invoice, Instant now) {
         boolean expired = payment.getStatus() == PaymentStatus.EXPIRED
                 || (payment.getStatus() == PaymentStatus.PENDING && !payment.getExpiresAt().isAfter(now));
-        String qrUrl = payment.getStatus() == PaymentStatus.PENDING && !expired
+        String qrUrl = payment.getStatus() == PaymentStatus.PENDING
+                && invoice.getStatus() == InvoiceStatus.UNPAID && !expired
                 ? vietQrUrlBuilder.build(payment) : null;
         return new StudentPaymentResponse(payment.getPaymentId(), invoice.getInvoiceId(),
                 invoice.getInvoiceType(), payment.getStatus(), invoice.getStatus(),
                 payment.getExpectedAmount(), "VND", payment.getPaymentReference(),
                 payment.getReceivingBankCode(), payment.getReceivingAccountNumber(), qrUrl,
-                payment.getCreatedAt(), payment.getExpiresAt(), expired);
+                payment.getCreatedAt(), payment.getExpiresAt(), payment.getPaidAt(), expired);
     }
 
     public static class InitiationResult {
