@@ -9,13 +9,71 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.query.Param;
 
 public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
+    @Query(value = """
+            select p.* from payments p where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                or cast(p.payment_id as text) like concat('%', :search, '%')
+                or cast(p.invoice_id as text) like concat('%', :search, '%'))
+            """, countQuery = """
+            select count(*) from payments p where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                or cast(p.payment_id as text) like concat('%', :search, '%')
+                or cast(p.invoice_id as text) like concat('%', :search, '%'))
+            """, nativeQuery = true)
+    Page<Payment> findManagerHistory(@Param("status") String status,
+            @Param("search") String search, Pageable pageable);
+
     Optional<Payment> findByPaymentReference(String paymentReference);
 
     List<Payment> findAllByInvoice_InvoiceIdOrderByCreatedAtDesc(Long invoiceId);
+
+    @Query(value = """
+            select p.* from payments p
+            join invoices i on i.invoice_id = p.invoice_id
+            left join contracts c on c.contract_id = i.contract_id
+            left join students owner on owner.id = c.student_id
+            where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                   or cast(p.payment_id as text) like concat('%', :search, '%')
+                   or cast(i.invoice_id as text) like concat('%', :search, '%'))
+              and ((i.invoice_type in ('ROOM_FEE', 'DEPOSIT') and owner.user_id = :userId)
+                or (i.invoice_type = 'UTILITY' and i.room_id is not null
+                  and i.billing_month is not null and exists (
+                    select 1 from room_assignments a
+                    join students resident on resident.id = a.student_id
+                    where a.room_id = i.room_id and resident.user_id = :userId
+                      and a.check_in_at is not null
+                      and a.check_in_at < i.billing_month + interval '1 month'
+                      and (a.check_out_at is null or a.check_out_at > i.billing_month))))
+            order by p.created_at desc, p.payment_id desc
+            """,
+            countQuery = """
+            select count(*) from payments p
+            join invoices i on i.invoice_id = p.invoice_id
+            left join contracts c on c.contract_id = i.contract_id
+            left join students owner on owner.id = c.student_id
+            where (:status = '' or p.status = :status)
+              and (:search = '' or lower(p.payment_reference) like lower(concat('%', :search, '%'))
+                   or cast(p.payment_id as text) like concat('%', :search, '%')
+                   or cast(i.invoice_id as text) like concat('%', :search, '%'))
+              and ((i.invoice_type in ('ROOM_FEE', 'DEPOSIT') and owner.user_id = :userId)
+                or (i.invoice_type = 'UTILITY' and i.room_id is not null
+                  and i.billing_month is not null and exists (
+                    select 1 from room_assignments a
+                    join students resident on resident.id = a.student_id
+                    where a.room_id = i.room_id and resident.user_id = :userId
+                      and a.check_in_at is not null
+                      and a.check_in_at < i.billing_month + interval '1 month'
+                      and (a.check_out_at is null or a.check_out_at > i.billing_month))))
+            """, nativeQuery = true)
+    Page<Payment> findHistoryForStudent(@Param("userId") Long userId,
+            @Param("status") String status, @Param("search") String search, Pageable pageable);
 
     Optional<Payment> findFirstByInvoice_InvoiceIdAndStatusOrderByCreatedAtDesc(
             Long invoiceId, PaymentStatus status);

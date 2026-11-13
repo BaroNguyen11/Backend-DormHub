@@ -1,6 +1,7 @@
 package com.dormhub.controller;
 
 import com.dormhub.dto.response.RoomAssignmentResponse;
+import com.dormhub.dto.response.RoommateResponse;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.entity.User;
 import com.dormhub.service.RoomAssignmentService;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import java.util.List;
 
 @RestController
 @Validated
@@ -20,6 +22,12 @@ import org.springframework.web.bind.annotation.*;
 public class StudentRoomAssignmentController {
 
     private final RoomAssignmentService roomAssignmentService;
+
+    @GetMapping("/roommates")
+    public ResponseEntity<ApiResponse<List<RoommateResponse>>> getMyRoommates(
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.success(roomAssignmentService.getMyRoommates(user.getId())));
+    }
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<RoomAssignmentResponse>>> getMyAssignments(

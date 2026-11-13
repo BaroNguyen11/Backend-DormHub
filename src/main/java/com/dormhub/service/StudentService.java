@@ -3,14 +3,11 @@ package com.dormhub.service;
 
 import com.dormhub.dto.request.StudentProfileUpdateRequest;
 import com.dormhub.dto.response.StudentProfileResponse;
-import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
-import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.UserStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.StudentMapper;
-import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.StudentRepository;
 import com.dormhub.specification.StudentSpecification;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +20,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.List;
 import java.util.Set;
 
 @Service
@@ -32,7 +28,6 @@ import java.util.Set;
 public class StudentService {
 
     private final StudentRepository studentRepository;
-    private final RoomAssignmentRepository roomAssignmentRepository;
     private final StudentMapper studentMapper;
     private final RefreshTokenService refreshTokenService;
 
@@ -73,15 +68,9 @@ public class StudentService {
             student.setDateOfBirth(request.getDateOfBirth());
         }
 
-        if (request.getGender() != null && request.getGender() != student.getGender()) {
-            // BR §5.2: chặn đổi giới tính khi đang lưu trú tại tòa áp giới tính
-            boolean hasActiveStay = roomAssignmentRepository.existsByStudent_IdAndStatusIn(
-                    student.getId(), List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN));
-            if (hasActiveStay) {
-                throw new AppException(ErrorCode.INVALID_REQUEST,
-                        "Không thể đổi giới tính khi đang lưu trú tại ký túc xá. Hãy liên hệ quản lý KTX");
-            }
-            student.setGender(request.getGender());
+        if (request.getGender() != null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Sinh viên không được tự chỉnh sửa giới tính. Hãy liên hệ quản lý KTX");
         }
 
         if (request.getAddress() != null) {
@@ -95,6 +84,9 @@ public class StudentService {
             student.getUser().setPhone(request.getPhone());
         }
         if (request.getCic() != null) {
+            if (studentRepository.existsByCicAndIdNot(request.getCic(), student.getId())) {
+                throw new AppException(ErrorCode.STUDENT_CIC_ALREADY_EXISTS);
+            }
             student.setCic(request.getCic());
         }
 
@@ -105,6 +97,7 @@ public class StudentService {
     public Page<StudentProfileResponse> searchStudent(
             String name,
             String studentCode,
+            UserStatus status,
             int page,
             int size,
             String sortBy,
@@ -140,6 +133,9 @@ public class StudentService {
         // 5. Kết hợp Specification tìm kiếm
         Specification<Student> spec = StudentSpecification.hasName(name).
                 and(StudentSpecification.hasStudentCode(studentCode));
+        if (status != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("user").get("status"), status));
+        }
         // 6. Truy vấn và map sang Response
         Page<Student> students = studentRepository.findAll(spec, pageable);
         return students.map(studentMapper::toResponse);

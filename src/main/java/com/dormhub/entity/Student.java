@@ -24,7 +24,8 @@ import java.time.LocalDateTime;
 @Table(name = "students",
         uniqueConstraints = {
                 @UniqueConstraint(name = "uk_students_user", columnNames = "user_id"),
-                @UniqueConstraint(name = "uk_students_code", columnNames = "student_code")
+                @UniqueConstraint(name = "uk_students_code", columnNames = "student_code"),
+                @UniqueConstraint(name = "uk_students_cic", columnNames = "cic")
         }
 
 )

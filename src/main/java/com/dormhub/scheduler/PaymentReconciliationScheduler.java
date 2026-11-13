@@ -41,7 +41,7 @@ public class PaymentReconciliationScheduler {
         int matchedCount = 0;
         for (SepayTransaction tx : unmatched) {
             try {
-                SepayWebhookService.Outcome outcome = webhookService.retryReconcile(tx);
+                SepayWebhookService.Outcome outcome = webhookService.retryReconcile(tx.getId());
                 if (outcome == SepayWebhookService.Outcome.MATCHED) {
                     matchedCount++;
                     log.info("Đối soát bù thành công giao dịch SePay #{}", tx.getSepayTransactionId());

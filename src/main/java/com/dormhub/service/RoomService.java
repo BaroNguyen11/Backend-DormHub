@@ -4,6 +4,7 @@ import com.dormhub.dto.request.RoomRequest;
 import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.Room;
+import com.dormhub.entity.User;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.RoomStatus;
@@ -16,6 +17,7 @@ import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.DormApplicationRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
+import com.dormhub.repository.StudentRepository;
 import jakarta.persistence.criteria.JoinType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -37,6 +39,7 @@ public class RoomService {
     private static final List<ContractStatus> CAPACITY_HOLD_STATUSES = List.of(ContractStatus.PENDING);
 
     private final RoomRepository roomRepository;
+    private final StudentRepository studentRepository;
     private final BuildingRepository buildingRepository;
     private final ContractRepository contractRepository;
     private final DormApplicationRepository dormApplicationRepository;
@@ -79,6 +82,19 @@ public class RoomService {
         return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
     }
 
+    public RoomResponse getRoomByIdForStudent(Long id, User user) {
+        Gender gender = getStudentGender(user);
+        if (gender == null) {
+            throw new AppException(ErrorCode.ROOM_NOT_FOUND);
+        }
+        Room room = roomRepository.findDetailById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        if (room.getBuilding() == null || room.getBuilding().getGenderRestriction() != gender) {
+            throw new AppException(ErrorCode.ROOM_NOT_FOUND);
+        }
+        return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
+    }
+
     public List<RoomResponse> getAvailableRooms() {
         List<Room> rooms = roomRepository.findByStatus(RoomStatus.AVAILABLE);
         Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
@@ -92,7 +108,11 @@ public class RoomService {
      * P1: danh sách phòng trống cho SINH VIÊN để tự chọn phòng khi nộp đơn đăng ký.
      * Lọc theo giới tính của tòa (khớp giới tính SV) và còn chỗ trống thật.
      */
-    public List<RoomResponse> getAvailableRoomsForStudent(Gender studentGender) {
+    public List<RoomResponse> getAvailableRoomsForStudent(User user) {
+        Gender studentGender = getStudentGender(user);
+        if (studentGender == null) {
+            return List.of();
+        }
         List<Room> rooms = roomRepository.findByStatus(RoomStatus.AVAILABLE);
         Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
         return rooms.stream()
@@ -101,6 +121,13 @@ public class RoomService {
                 .map(room -> toResponseWithAvailability(room, holdsByRoom.getOrDefault(room.getId(), 0)))
                 .filter(response -> Boolean.TRUE.equals(response.getIsAvailable()))
                 .toList();
+    }
+
+    private Gender getStudentGender(User user) {
+        Gender gender = studentRepository.findByUserId(user.getId())
+                .map(student -> student.getGender())
+                .orElse(null);
+        return gender == Gender.MALE || gender == Gender.FEMALE ? gender : null;
     }
 
     @Transactional

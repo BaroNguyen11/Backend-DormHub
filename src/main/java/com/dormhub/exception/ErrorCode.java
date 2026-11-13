@@ -30,6 +30,7 @@ public enum ErrorCode {
     // Student
     STUDENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ sinh viên"),
     STUDENT_CODE_ALREADY_EXISTS(HttpStatus.CONFLICT, "Mã sinh viên đã được sử dụng"),
+    STUDENT_CIC_ALREADY_EXISTS(HttpStatus.CONFLICT, "Số CCCD đã được sử dụng bởi sinh viên khác"),
 
     // Renewal
     RENEWAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu gia hạn"),

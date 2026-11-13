@@ -25,5 +25,6 @@ public class StudentPaymentResponse {
     private final String vietQrUrl;
     private final Instant createdAt;
     private final Instant expiresAt;
+    private final Instant paidAt;
     private final boolean expired;
 }

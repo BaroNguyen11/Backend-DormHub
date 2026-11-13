@@ -38,10 +38,12 @@ public class MaintenanceController {
     @GetMapping("/student/maintenance")
     public ResponseEntity<ApiResponse<Page<MaintenanceResponse>>> getMyRequests(
             @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) MaintenanceStatus status,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        Page<MaintenanceResponse> response = maintenanceService.getMyRequests(user.getId(), page, size);
+        Page<MaintenanceResponse> response = maintenanceService.getMyRequests(user.getId(), search, status, page, size);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu bảo trì thành công", response));
     }
 

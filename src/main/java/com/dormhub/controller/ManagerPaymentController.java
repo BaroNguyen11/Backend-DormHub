@@ -3,6 +3,7 @@ package com.dormhub.controller;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.ManagerPaymentResponse;
 import com.dormhub.entity.Payment;
+import com.dormhub.entity.enums.PaymentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.repository.PaymentRepository;
@@ -36,6 +37,8 @@ public class ManagerPaymentController {
     @GetMapping
     @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<Page<ManagerPaymentResponse>>> search(
+            @RequestParam(required = false) PaymentStatus status,
+            @RequestParam(defaultValue = "") String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
@@ -44,7 +47,8 @@ public class ManagerPaymentController {
         }
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "createdAt").and(Sort.by(Sort.Direction.DESC, "paymentId")));
-        Page<ManagerPaymentResponse> payments = paymentRepository.findAll(pageable)
+        Page<ManagerPaymentResponse> payments = paymentRepository.findManagerHistory(
+                        status == null ? "" : status.name(), search.trim(), pageable)
                 .map(this::toResponse);
         return ResponseEntity.ok(ApiResponse.success(
                 "Get payments successfully", payments));

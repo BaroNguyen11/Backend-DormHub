@@ -1,6 +1,7 @@
 package com.dormhub.service;
 
 import com.dormhub.dto.response.RoomAssignmentResponse;
+import com.dormhub.dto.response.RoommateResponse;
 import com.dormhub.entity.Building;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.DormApplication;
@@ -28,6 +29,7 @@ import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import com.dormhub.repository.StudentRepository;
 import java.util.List;
+import java.time.LocalDateTime;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -152,6 +154,20 @@ public class RoomAssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
         return roomAssignmentRepository.findAllByStudent_Id(student.getId(), pageable(page, size))
                 .map(roomAssignmentMapper::toResponse);
+    }
+
+    public List<RoommateResponse> getMyRoommates(Long userId) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        LocalDateTime now = LocalDateTime.now();
+        return roomAssignmentRepository.findCurrentResidences(
+                        student.getId(), ACTIVE_ASSIGNMENT_STATUSES, ContractStatus.ACTIVE, now)
+                .stream()
+                .findFirst()
+                .map(assignment -> roomAssignmentRepository.findCurrentRoommates(
+                        assignment.getRoom().getId(), student.getId(),
+                        ACTIVE_ASSIGNMENT_STATUSES, ContractStatus.ACTIVE, now))
+                .orElseGet(List::of);
     }
 
     public Page<RoomAssignmentResponse> getAll(RoomAssignmentStatus status, int page, int size) {

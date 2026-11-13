@@ -29,5 +29,6 @@ public enum NotificationType {
     CONTRACT_EXPIRING,
 
     // 5. Thông báo chung
-    GENERAL
+    GENERAL,
+    MANAGER_ANNOUNCEMENT
 }

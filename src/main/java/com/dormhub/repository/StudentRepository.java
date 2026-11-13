@@ -27,6 +27,8 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
 
     boolean existsByStudentCode(String studentCode);
 
+    boolean existsByCicAndIdNot(String cic, Long id);
+
     @Override
     @EntityGraph(attributePaths = {"user"})
     Page<Student> findAll(Specification<Student> spec, Pageable pageable);

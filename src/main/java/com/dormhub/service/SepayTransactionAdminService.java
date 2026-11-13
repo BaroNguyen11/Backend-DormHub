@@ -6,6 +6,7 @@ import com.dormhub.entity.enums.SepayTransactionStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.repository.SepayTransactionRepository;
+import java.time.Instant;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -50,6 +51,13 @@ public class SepayTransactionAdminService {
         return transactions.map(this::toResponse);
     }
 
+    @Transactional(readOnly = true)
+    public SepayTransactionResponse get(Long transactionId) {
+        return toResponse(transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_REQUEST,
+                        "Không tìm thấy giao dịch SePay #" + transactionId)));
+    }
+
     /**
      * Đối soát lại một giao dịch UNMATCHED — hữu dụng khi sinh viên chuyển khoản
      * TRƯỚC khi bấm "Thanh toán" (lúc webhook đến chưa có phiên thanh toán nào
@@ -60,7 +68,7 @@ public class SepayTransactionAdminService {
         if (transactionId == null || transactionId <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "transactionId phải là số dương");
         }
-        SepayTransaction transaction = transactionRepository.findById(transactionId)
+        SepayTransaction transaction = transactionRepository.findByIdForUpdate(transactionId)
                 .orElseThrow(() -> new AppException(ErrorCode.INVALID_REQUEST,
                         "Không tìm thấy giao dịch SePay #" + transactionId));
         if (transaction.getStatus() != SepayTransactionStatus.UNMATCHED) {
@@ -68,7 +76,34 @@ public class SepayTransactionAdminService {
                     "Chỉ có thể đối soát lại giao dịch ở trạng thái UNMATCHED (hiện tại: "
                             + transaction.getStatus() + ")");
         }
-        webhookService.retryReconcile(transaction);
+        webhookService.retryReconcile(transactionId);
+        return toResponse(transaction);
+    }
+
+    @Transactional
+    public SepayTransactionResponse recordReview(Long transactionId, Long managerUserId, String note) {
+        if (transactionId == null || transactionId <= 0 || managerUserId == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        SepayTransaction transaction = transactionRepository.findByIdForUpdate(transactionId)
+                .orElseThrow(() -> new AppException(ErrorCode.INVALID_REQUEST,
+                        "Không tìm thấy giao dịch SePay #" + transactionId));
+        if (transaction.getStatus() != SepayTransactionStatus.REVIEW_REQUIRED) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ ghi chú rà soát cho giao dịch REVIEW_REQUIRED");
+        }
+        if (note == null || note.isBlank()) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần nhập ghi chú rà soát");
+        }
+        String entry = " | Manager #" + managerUserId + " @ " + Instant.now() + ": " + note.trim();
+        String updatedReason = (transaction.getReviewReason() == null
+                ? "Cần rà soát" : transaction.getReviewReason()) + entry;
+        if (updatedReason.length() > 500) {
+            throw new AppException(ErrorCode.INVALID_REQUEST,
+                    "Ghi chú rà soát vượt giới hạn lưu trữ; cần xử lý trực tiếp với bộ phận tài chính");
+        }
+        transaction.setReviewReason(updatedReason);
+        transactionRepository.save(transaction);
         return toResponse(transaction);
     }
 

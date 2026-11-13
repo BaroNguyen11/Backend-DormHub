@@ -1,6 +1,8 @@
 package com.dormhub.repository;
 
 import com.dormhub.entity.RoomAssignment;
+import com.dormhub.dto.response.RoommateResponse;
+import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import jakarta.persistence.LockModeType;
 import java.time.LocalDateTime;
@@ -62,6 +64,35 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
 
     Optional<RoomAssignment> findFirstByStudent_IdAndStatusInOrderByAssignmentIdDesc(
             Long studentId, Collection<RoomAssignmentStatus> statuses);
+
+    @Query("select assignment from RoomAssignment assignment "
+            + "where assignment.student.id = :studentId "
+            + "and assignment.status in :statuses "
+            + "and assignment.contract.status = :contractStatus "
+            + "and assignment.contract.startDate <= :now "
+            + "and assignment.contract.endDate >= :now "
+            + "order by assignment.assignmentId desc")
+    List<RoomAssignment> findCurrentResidences(
+            @Param("studentId") Long studentId,
+            @Param("statuses") Collection<RoomAssignmentStatus> statuses,
+            @Param("contractStatus") ContractStatus contractStatus,
+            @Param("now") LocalDateTime now);
+
+    @Query("select distinct new com.dormhub.dto.response.RoommateResponse("
+            + "student.user.fullName, student.studentCode, student.gender) "
+            + "from RoomAssignment assignment join assignment.student student "
+            + "where assignment.room.id = :roomId and student.id <> :studentId "
+            + "and assignment.status in :statuses "
+            + "and assignment.contract.status = :contractStatus "
+            + "and assignment.contract.startDate <= :now "
+            + "and assignment.contract.endDate >= :now "
+            + "order by student.studentCode")
+    List<RoommateResponse> findCurrentRoommates(
+            @Param("roomId") Long roomId,
+            @Param("studentId") Long studentId,
+            @Param("statuses") Collection<RoomAssignmentStatus> statuses,
+            @Param("contractStatus") ContractStatus contractStatus,
+            @Param("now") LocalDateTime now);
 
     /**
      * Bản có KHÓA biên (PESSIMISTIC_WRITE) của truy vấn phân phòng hiện tại.

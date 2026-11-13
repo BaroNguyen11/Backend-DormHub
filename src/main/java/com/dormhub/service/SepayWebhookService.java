@@ -117,21 +117,21 @@ public class SepayWebhookService {
                 || payload.getTransferAmount().compareTo(invoice.getTotalAmount()) != 0) {
             return review(transaction, payment, "Amount or payment method does not match");
         }
-        if (payment.getStatus() != PaymentStatus.PENDING || invoice.getStatus() != InvoiceStatus.UNPAID) {
+        if (!canSettle(payment, invoice)) {
             return review(transaction, payment, "Payment or invoice is no longer payable");
         }
         if (payment.getCreatedAt() == null
                 || transactionAt.isBefore(payment.getCreatedAt().truncatedTo(ChronoUnit.SECONDS))) {
             return review(transaction, payment, "Transfer predates payment creation");
         }
-        if (payment.getExpiresAt() == null || !payment.getExpiresAt().isAfter(Instant.now())
-                || transactionAt.isAfter(payment.getExpiresAt())) {
-            return review(transaction, payment, "Payment or webhook arrived after expiry");
+        if (payment.getExpiresAt() == null || !transactionAt.isBefore(payment.getExpiresAt())) {
+            return review(transaction, payment, "Bank transfer occurred after payment expiry");
         }
 
         transaction.setStatus(SepayTransactionStatus.MATCHED);
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setPaidAt(transactionAt);
+        cancelOtherPendingPayments(invoice.getInvoiceId(), payment.getPaymentId());
         if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
             depositService.confirmDepositPaid(invoice.getInvoiceId());
         } else {
@@ -153,10 +153,16 @@ public class SepayWebhookService {
     }
 
     @Transactional
-    public Outcome retryReconcile(SepayTransaction transaction) {
+    public Outcome retryReconcile(Long transactionId) {
+        SepayTransaction transaction = transactionRepository.findByIdForUpdate(transactionId).orElse(null);
+        if (transaction == null) {
+            return Outcome.UNMATCHED;
+        }
         if (transaction.getStatus() != SepayTransactionStatus.UNMATCHED
                 || transaction.getCode() == null || transaction.getCode().isBlank()) {
-            return transaction.getStatus() == SepayTransactionStatus.MATCHED ? Outcome.MATCHED : Outcome.UNMATCHED;
+            return transaction.getStatus() == SepayTransactionStatus.MATCHED ? Outcome.MATCHED
+                    : transaction.getStatus() == SepayTransactionStatus.REVIEW_REQUIRED
+                    ? Outcome.REVIEW_REQUIRED : Outcome.UNMATCHED;
         }
         Payment candidate = paymentRepository.findByPaymentReference(transaction.getCode()).orElse(null);
         if (candidate == null || candidate.getInvoice() == null) {
@@ -191,7 +197,7 @@ public class SepayWebhookService {
                 || transaction.getTransferAmount().compareTo(invoice.getTotalAmount()) != 0) {
             return review(transaction, payment, "Amount or payment method does not match");
         }
-        if (payment.getStatus() != PaymentStatus.PENDING || invoice.getStatus() != InvoiceStatus.UNPAID) {
+        if (!canSettle(payment, invoice)) {
             return review(transaction, payment, "Payment or invoice is no longer payable");
         }
         Instant transactionAt = transaction.getTransactionAt();
@@ -199,15 +205,15 @@ public class SepayWebhookService {
                 || transactionAt.isBefore(payment.getCreatedAt().truncatedTo(ChronoUnit.SECONDS))) {
             return review(transaction, payment, "Transfer predates payment creation");
         }
-        if (payment.getExpiresAt() == null || !payment.getExpiresAt().isAfter(Instant.now())
-                || transactionAt.isAfter(payment.getExpiresAt())) {
-            return review(transaction, payment, "Payment or webhook arrived after expiry");
+        if (payment.getExpiresAt() == null || !transactionAt.isBefore(payment.getExpiresAt())) {
+            return review(transaction, payment, "Bank transfer occurred after payment expiry");
         }
 
         transaction.setStatus(SepayTransactionStatus.MATCHED);
         transaction.setReviewReason(null);
         payment.setStatus(PaymentStatus.SUCCESS);
         payment.setPaidAt(transactionAt);
+        cancelOtherPendingPayments(invoice.getInvoiceId(), payment.getPaymentId());
         if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
             depositService.confirmDepositPaid(invoice.getInvoiceId());
         } else {
@@ -215,6 +221,23 @@ public class SepayWebhookService {
         }
         transactionRepository.saveAndFlush(transaction);
         return Outcome.MATCHED;
+    }
+
+    private boolean canSettle(Payment payment, Invoice invoice) {
+        return invoice.getStatus() == InvoiceStatus.UNPAID
+                && (payment.getStatus() == PaymentStatus.PENDING
+                    || payment.getStatus() == PaymentStatus.EXPIRED)
+                && paymentRepository.findFirstByInvoice_InvoiceIdAndStatusOrderByCreatedAtDesc(
+                        invoice.getInvoiceId(), PaymentStatus.SUCCESS).isEmpty();
+    }
+
+    private void cancelOtherPendingPayments(Long invoiceId, Long successfulPaymentId) {
+        for (Payment other : paymentRepository.findAllByInvoice_InvoiceIdOrderByCreatedAtDesc(invoiceId)) {
+            if (!other.getPaymentId().equals(successfulPaymentId)
+                    && other.getStatus() == PaymentStatus.PENDING) {
+                other.setStatus(PaymentStatus.CANCELLED);
+            }
+        }
     }
 
     public boolean isTransactionIdUniqueViolation(Throwable failure) {
