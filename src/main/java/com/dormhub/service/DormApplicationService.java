@@ -14,6 +14,7 @@ import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
 import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
+import com.dormhub.entity.enums.Role;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
@@ -90,6 +91,21 @@ public class DormApplicationService {
                     saved.getId(),
                     student.getUser().getId());
         }
+        List<Long> managerIds = userRepository.findAllByRole(Role.MANAGER).stream()
+                .map(User::getId)
+                .toList();
+        String studentName = student.getUser() == null
+                ? student.getFullName()
+                : student.getUser().getFullName();
+        notificationService.sendNotification(
+                NotificationType.APPLICATION_SUBMITTED,
+                "Đơn đăng ký phòng mới",
+                String.format("Sinh viên %s vừa đăng ký phòng %s, tòa %s.",
+                        studentName,
+                        selectedRoom.getRoomNumber(),
+                        selectedRoom.getBuilding().getName()),
+                saved.getId(),
+                managerIds);
         return toResponse(saved);
     }
 

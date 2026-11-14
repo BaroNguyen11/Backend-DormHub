@@ -50,10 +50,15 @@ public class GlobalExceptionHandler {
                         )
                 );
 
+        String firstError = errors.values().stream()
+                .filter(message -> message != null && !message.isBlank())
+                .findFirst()
+                .orElse(ErrorCode.VALIDATION_ERROR.getMessage());
+
         return ResponseEntity.badRequest().body(
                         ApiResponse.<Map<String, String>>error(
                                 "VALIDATION_ERROR",
-                                "Dữ liệu đầu vào không hợp lệ",
+                                firstError,
                                 errors
                         )
                 );

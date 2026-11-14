@@ -30,6 +30,17 @@ public interface RoomRepository extends JpaRepository<Room, Long>, JpaSpecificat
 
     @EntityGraph(attributePaths = "building")
     List<Room> findByStatus(RoomStatus status);
+
+    @Query("select room from Room room join fetch room.building building "
+            + "where room.status = :status and room.currentOccupancy < room.capacity")
+    List<Room> findAvailableWithPhysicalSpace(@Param("status") RoomStatus status);
+
+    @Query("select room from Room room join fetch room.building building "
+            + "where room.status = :status and room.currentOccupancy < room.capacity "
+            + "and building.genderRestriction = :gender")
+    List<Room> findAvailableWithPhysicalSpaceAndGender(
+            @Param("status") RoomStatus status,
+            @Param("gender") com.dormhub.entity.enums.Gender gender);
     Optional<Room> findByBuilding_IdAndRoomNumber(Long buildingId, String roomNumber);
     
     // Count methods

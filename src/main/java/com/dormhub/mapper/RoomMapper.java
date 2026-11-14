@@ -37,6 +37,7 @@ public class RoomMapper {
                 .roomType(room.getRoomType())
                 .capacity(room.getCapacity())
                 .currentOccupancy(room.getCurrentOccupancy())
+                .availableSlots(Math.max(0, room.getCapacity() - room.getCurrentOccupancy()))
                 .pricePerMonth(room.getPricePerMonth())
                 .status(room.getStatus())
                 .electricMeterNumber(room.getElectricMeterNumber())

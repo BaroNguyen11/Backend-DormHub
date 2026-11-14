@@ -5,10 +5,16 @@ import com.dormhub.dto.request.StudentProfileUpdateRequest;
 import com.dormhub.dto.response.StudentProfileResponse;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.UserStatus;
+import com.dormhub.entity.enums.Role;
+import com.dormhub.entity.enums.Gender;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.StudentMapper;
 import com.dormhub.repository.StudentRepository;
+import com.dormhub.repository.UserRepository;
+import com.dormhub.dto.request.StudentAccountCreateRequest;
+import com.dormhub.entity.User;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import com.dormhub.specification.StudentSpecification;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -21,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Set;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +37,8 @@ public class StudentService {
     private final StudentRepository studentRepository;
     private final StudentMapper studentMapper;
     private final RefreshTokenService refreshTokenService;
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public StudentProfileResponse getMyProfile(Long userId) {
         Student student = studentRepository.findByUserId(userId)
@@ -47,6 +56,10 @@ public class StudentService {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() ->
                         new AppException(ErrorCode.STUDENT_NOT_FOUND));
+
+        if (student.getGender() == null && request.getGender() == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Vui lòng chọn giới tính Nam hoặc Nữ để hoàn thiện hồ sơ sinh viên");
+        }
 
         // Bổ sung mã sinh viên MỘT LẦN DUY NHẤT khi hồ sơ còn trống mã
         if (StringUtils.hasText(request.getStudentCode())) {
@@ -69,8 +82,14 @@ public class StudentService {
         }
 
         if (request.getGender() != null) {
-            throw new AppException(ErrorCode.INVALID_REQUEST,
-                    "Sinh viên không được tự chỉnh sửa giới tính. Hãy liên hệ quản lý KTX");
+            if (request.getGender() != Gender.MALE && request.getGender() != Gender.FEMALE) {
+                throw new AppException(ErrorCode.INVALID_REQUEST, "Giới tính phải là Nam hoặc Nữ");
+            }
+            if (student.getGender() != null && student.getGender() != request.getGender()) {
+                throw new AppException(ErrorCode.INVALID_REQUEST,
+                        "Giới tính đã được xác nhận và không thể thay đổi. Hãy liên hệ quản lý KTX");
+            }
+            student.setGender(request.getGender());
         }
 
         if (request.getAddress() != null) {
@@ -155,6 +174,9 @@ public class StudentService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
+        if (student.getUser() == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Sinh viên chưa được cấp tài khoản để cập nhật trạng thái");
+        }
         boolean statusChanged = student.getUser().getStatus() != newStatus;
         student.getUser().setStatus(newStatus);
         studentRepository.save(student);
@@ -164,6 +186,39 @@ public class StudentService {
             refreshTokenService.revokeAllForUser(student.getUser().getId());
         }
 
+        return studentMapper.toResponse(student);
+    }
+
+    @Transactional
+    public StudentProfileResponse createAccount(Long studentId, StudentAccountCreateRequest request) {
+        Student student = studentRepository.findById(studentId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        if (student.getUser() != null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Sinh viên đã được liên kết với một tài khoản");
+        }
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (userRepository.existsByEmail(email)) {
+            throw new AppException(ErrorCode.EMAIL_ALREADY_EXISTS);
+        }
+        String username = request.getUsername().trim();
+        if (userRepository.existsByUsername(username)) {
+            throw new AppException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        if (!StringUtils.hasText(student.getFullName())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Hồ sơ sinh viên cần có họ tên trước khi cấp tài khoản");
+        }
+        User user = new User();
+        user.setUsername(username);
+        user.setEmail(email);
+        user.setFullName(student.getFullName());
+        user.setPhone(null);
+        user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.STUDENT);
+        user.setStatus(UserStatus.ACTIVE);
+        student.setEmail(email);
+        User savedUser = userRepository.save(user);
+        student.setUser(savedUser);
+        studentRepository.save(student);
         return studentMapper.toResponse(student);
     }
 }

@@ -42,6 +42,6 @@ public class RegisterRequest {
     @Pattern(regexp = "^[0-9]{8}$", message = "Mã sinh viên phải gồm đúng 8 chữ số")
     private String studentCode;
 
-    @NotNull(message = "Giới tính không được để trống")
-    private Gender gender;
+//    @NotNull(message = "Giới tính không được để trống")
+//    private Gender gender;
 }
