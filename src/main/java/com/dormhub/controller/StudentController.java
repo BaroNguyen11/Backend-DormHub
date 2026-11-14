@@ -3,6 +3,7 @@ package com.dormhub.controller;
 
 import com.dormhub.dto.request.StudentProfileUpdateRequest;
 import com.dormhub.dto.request.StudentStatusUpdateRequest;
+import com.dormhub.dto.request.StudentAccountCreateRequest;
 import com.dormhub.dto.response.ApiResponse;
 import com.dormhub.dto.response.StudentProfileResponse;
 import com.dormhub.entity.User;
@@ -65,9 +66,21 @@ public class StudentController {
             @PathVariable Long studentId,
             @Valid @RequestBody StudentStatusUpdateRequest request) {
 
+        StudentProfileResponse result = studentService.updateStudentStatus(studentId, request.getStatus());
         return ResponseEntity.ok(ApiResponse.success(
-                "Cập nhật trạng thái sinh viên thành công",
-                studentService.updateStudentStatus(studentId, request.getStatus())
+                "Cập nhật trạng thái sinh viên " + result.getFullName() + " thành công",
+                result
+        ));
+    }
+
+    @PostMapping("/manager/students/{studentId}/account")
+    public ResponseEntity<ApiResponse<StudentProfileResponse>> createStudentAccount(
+            @PathVariable Long studentId,
+            @Valid @RequestBody StudentAccountCreateRequest request) {
+        StudentProfileResponse result = studentService.createAccount(studentId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Cấp tài khoản thành công cho sinh viên " + result.getFullName(),
+                result
         ));
     }
 }

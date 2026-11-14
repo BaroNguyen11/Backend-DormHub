@@ -26,6 +26,7 @@ public class RoomResponse {
     private RoomType roomType;
     private Integer capacity;
     private Integer currentOccupancy;
+    private Integer availableSlots;
     private BigDecimal pricePerMonth;
     private RoomStatus status;
     private String electricMeterNumber;

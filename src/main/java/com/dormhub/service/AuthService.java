@@ -46,9 +46,9 @@ public class AuthService {
     @Transactional
     public RegisterResponse register(RegisterRequest request) {
 
-        if (request.getGender() != Gender.MALE && request.getGender() != Gender.FEMALE) {
-            throw new AppException(ErrorCode.INVALID_REQUEST, "Giới tính phải là Nam hoặc Nữ");
-        }
+//        if (request.getGender() != Gender.MALE && request.getGender() != Gender.FEMALE) {
+//            throw new AppException(ErrorCode.INVALID_REQUEST, "Giới tính phải là Nam hoặc Nữ");
+//        }
 
         String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
 
@@ -88,7 +88,9 @@ public class AuthService {
         Student student = new Student();
         student.setUser(savedUser);
         student.setStudentCode(studentCode);
-        student.setGender(request.getGender());
+        student.setFullName(savedUser.getFullName());
+        student.setEmail(savedUser.getEmail());
+//        student.setGender(request.getGender());
         studentRepository.save(student);
 
         return new RegisterResponse(

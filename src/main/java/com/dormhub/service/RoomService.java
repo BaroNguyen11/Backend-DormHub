@@ -28,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.stream.Collectors;
 
 @Service
@@ -71,7 +72,7 @@ public class RoomService {
             return predicates;
         };
         Page<Room> rooms = roomRepository.findAll(specification, pageable);
-        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms.getContent());
+        Map<Long, Integer> holdsByRoom = getCapacityReservations(rooms.getContent());
         return rooms.map(room -> toResponseWithAvailability(
                 room, holdsByRoom.getOrDefault(room.getId(), 0)));
     }
@@ -79,7 +80,7 @@ public class RoomService {
     public RoomResponse getRoomById(Long id) {
         Room room = roomRepository.findDetailById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
+        return toResponseWithAvailability(room, getRoomCapacityReservations(room.getId()));
     }
 
     public RoomResponse getRoomByIdForStudent(Long id, User user) {
@@ -92,12 +93,12 @@ public class RoomService {
         if (room.getBuilding() == null || room.getBuilding().getGenderRestriction() != gender) {
             throw new AppException(ErrorCode.ROOM_NOT_FOUND);
         }
-        return toResponseWithAvailability(room, getPendingContractCount(room.getId()));
+        return toResponseWithAvailability(room, getRoomCapacityReservations(room.getId()));
     }
 
     public List<RoomResponse> getAvailableRooms() {
-        List<Room> rooms = roomRepository.findByStatus(RoomStatus.AVAILABLE);
-        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
+        List<Room> rooms = roomRepository.findAvailableWithPhysicalSpace(RoomStatus.AVAILABLE);
+        Map<Long, Integer> holdsByRoom = getCapacityReservations(rooms);
         return rooms.stream()
                 .map(room -> toResponseWithAvailability(room, holdsByRoom.getOrDefault(room.getId(), 0)))
                 .filter(response -> Boolean.TRUE.equals(response.getIsAvailable()))
@@ -113,8 +114,9 @@ public class RoomService {
         if (studentGender == null) {
             return List.of();
         }
-        List<Room> rooms = roomRepository.findByStatus(RoomStatus.AVAILABLE);
-        Map<Long, Integer> holdsByRoom = getPendingContractCounts(rooms);
+        List<Room> rooms = roomRepository.findAvailableWithPhysicalSpaceAndGender(
+                RoomStatus.AVAILABLE, studentGender);
+        Map<Long, Integer> holdsByRoom = getCapacityReservations(rooms);
         return rooms.stream()
                 .filter(room -> room.getBuilding() != null
                         && room.getBuilding().getGenderRestriction() == studentGender)
@@ -157,7 +159,7 @@ public class RoomService {
             throw new AppException(ErrorCode.ROOM_ALREADY_EXISTS);
         }
 
-        int heldSlots = getPendingContractCount(id);
+        int heldSlots = getRoomCapacityReservations(id);
         int occupiedAndHeld = room.getCurrentOccupancy() + heldSlots;
         if (request.getCapacity() < occupiedAndHeld) {
             throw new AppException(ErrorCode.ROOM_CAPACITY_BELOW_OCCUPANCY);
@@ -187,7 +189,7 @@ public class RoomService {
     public RoomResponse updateRoomStatus(Long id, RoomStatus status) {
         Room room = roomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        int heldSlots = getPendingContractCount(id);
+        int heldSlots = getRoomCapacityReservations(id);
         int occupiedAndHeld = room.getCurrentOccupancy() + heldSlots;
         if (status == RoomStatus.MAINTENANCE && occupiedAndHeld > 0) {
             throw new AppException(ErrorCode.ROOM_HAS_ACTIVE_CONTRACTS);
@@ -212,7 +214,7 @@ public class RoomService {
         Room room = roomRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         if (room.getCurrentOccupancy() > 0
-                || getPendingContractCount(id) > 0
+                || getRoomCapacityReservations(id) > 0
                 || roomAssignmentRepository.existsByRoom_Id(id)
                 || dormApplicationRepository.existsByRequestedRoomId(id)) {
             throw new AppException(ErrorCode.ROOM_HAS_HISTORY);
@@ -224,7 +226,18 @@ public class RoomService {
         RoomResponse response = roomMapper.toResponse(room);
         boolean hasSpace = room.getCurrentOccupancy() + heldSlots < room.getCapacity();
         response.setIsAvailable(room.getStatus() == RoomStatus.AVAILABLE && hasSpace);
+        response.setAvailableSlots(Math.max(0, room.getCapacity() - room.getCurrentOccupancy() - heldSlots));
         return response;
+    }
+
+    private Map<Long, Integer> getCapacityReservations(List<Room> rooms) {
+        if (rooms.isEmpty()) return Map.of();
+        List<Long> roomIds = rooms.stream().map(Room::getId).toList();
+        Map<Long, Integer> reservations = new HashMap<>(getPendingContractCounts(rooms));
+        dormApplicationRepository.findRoomApplicationHoldCounts(
+                        roomIds, com.dormhub.entity.enums.DormApplicationStatus.PENDING)
+                .forEach(hold -> reservations.merge(hold.getRoomId(), Math.toIntExact(hold.getHoldCount()), Integer::sum));
+        return reservations;
     }
 
     private Map<Long, Integer> getPendingContractCounts(List<Room> rooms) {
@@ -239,8 +252,12 @@ public class RoomService {
                         Integer::sum));
     }
 
-    private int getPendingContractCount(Long roomId) {
-        return Math.toIntExact(contractRepository.countByRoom_IdAndStatusIn(roomId, CAPACITY_HOLD_STATUSES));
+    private int getRoomCapacityReservations(Long roomId) {
+        int pendingContracts = Math.toIntExact(
+                contractRepository.countByRoom_IdAndStatusIn(roomId, CAPACITY_HOLD_STATUSES));
+        int pendingApplications = Math.toIntExact(dormApplicationRepository.countByRequestedRoomIdAndStatusIn(
+                roomId, List.of(com.dormhub.entity.enums.DormApplicationStatus.PENDING)));
+        return pendingContracts + pendingApplications;
     }
 
     private void validateFloor(Integer floor, Building building) {

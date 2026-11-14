@@ -14,6 +14,7 @@ import lombok.Setter;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import jakarta.persistence.PreRemove;
 
 /*
  *@description: this is a class to test the User class
@@ -76,5 +77,14 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    @PreRemove
+    protected void preserveStudentProfile() {
+        if (student != null) {
+            if (student.getFullName() == null) student.setFullName(fullName);
+            if (student.getEmail() == null) student.setEmail(email);
+            student.setUser(null);
+        }
     }
 }

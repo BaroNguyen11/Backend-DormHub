@@ -11,6 +11,8 @@ import lombok.*;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 /*
  *@description: this is a class to test the Student class
@@ -39,6 +41,12 @@ public class Student {
     @Column(name = "student_code", unique = true, length = 8)
     private String studentCode;
 
+    @Column(name = "full_name", length = 50)
+    private String fullName;
+
+    @Column(length = 50)
+    private String email;
+
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
@@ -63,8 +71,9 @@ public class Student {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @OneToOne(fetch = FetchType.LAZY,optional = false)
-    @JoinColumn(name = "user_id",unique = true,nullable = false,   foreignKey = @ForeignKey(name = "fk_students_user"))
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", unique = true, foreignKey = @ForeignKey(name = "fk_students_user"))
+    @OnDelete(action = OnDeleteAction.SET_NULL)
     private User user;
 
     // Current room cache synchronized from assignment and contract workflows.

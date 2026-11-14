@@ -6,6 +6,7 @@ package com.dormhub.specification;
 
 import com.dormhub.entity.Student;
 import org.springframework.data.jpa.domain.Specification;
+import jakarta.persistence.criteria.JoinType;
 
 /*
  *@description: this is a class to test the StudentSpecification class
@@ -19,7 +20,8 @@ public class StudentSpecification {
                 if (name == null || name.trim().isEmpty()){
                     return criteriaBuilder.conjunction();
                 }else return criteriaBuilder.like(
-                        criteriaBuilder.lower(root.get("user").get("fullName")),
+                        criteriaBuilder.lower(criteriaBuilder.coalesce(
+                                root.join("user", JoinType.LEFT).get("fullName"), root.get("fullName"))),
                         "%" + name.trim().toLowerCase() + "%"
                 );
             }));

@@ -25,11 +25,12 @@ public class StudentMapper {
                 .cic(student.getCic())
                 // Thông tin lấy từ User liên kết (có null check an toàn)
                 .username(user != null ? user.getUsername() : null)
-                .email(user != null ? user.getEmail() : null)
-                .fullName(user != null ? user.getFullName() : null)
+                .email(user != null ? user.getEmail() : student.getEmail())
+                .fullName(user != null ? user.getFullName() : student.getFullName())
                 .phone(user != null ? user.getPhone() : null)
                 .phoneNumber(user != null ? user.getPhone() : null)
                 .status(user != null ? user.getStatus() : null)
+                .accountStatus(user == null ? "NO_ACCOUNT" : user.getStatus().name())
                 .build();
     }
 }

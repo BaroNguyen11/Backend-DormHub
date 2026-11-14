@@ -25,4 +25,5 @@ public class StudentProfileResponse {
     private final String email;
     private final String fullName;
     private final UserStatus status;
+    private final String accountStatus;
 }
