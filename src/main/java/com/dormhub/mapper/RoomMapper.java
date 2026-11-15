@@ -34,6 +34,7 @@ public class RoomMapper {
                 .buildingId(room.getBuilding().getId())
                 .buildingName(room.getBuilding().getName())
                 .buildingCode(room.getBuilding().getBuildingCode())
+                .genderRestriction(room.getBuilding().getGenderRestriction())
                 .roomType(room.getRoomType())
                 .capacity(room.getCapacity())
                 .currentOccupancy(room.getCurrentOccupancy())

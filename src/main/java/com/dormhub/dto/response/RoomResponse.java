@@ -2,6 +2,7 @@ package com.dormhub.dto.response;
 
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.RoomType;
+import com.dormhub.entity.enums.Gender;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -10,6 +11,7 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -23,6 +25,7 @@ public class RoomResponse {
     private Long buildingId;
     private String buildingName;
     private String buildingCode;
+    private Gender genderRestriction;
     private RoomType roomType;
     private Integer capacity;
     private Integer currentOccupancy;
@@ -35,4 +38,5 @@ public class RoomResponse {
     private Boolean isAvailable; // capacity > currentOccupancy
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private List<RoomResidentResponse> residents;
 }

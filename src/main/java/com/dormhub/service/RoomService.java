@@ -7,6 +7,7 @@ import com.dormhub.entity.Room;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.entity.enums.RoomStatus;
 import com.dormhub.entity.enums.RoomType;
 import com.dormhub.exception.AppException;
@@ -80,7 +81,10 @@ public class RoomService {
     public RoomResponse getRoomById(Long id) {
         Room room = roomRepository.findDetailById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
-        return toResponseWithAvailability(room, getRoomCapacityReservations(room.getId()));
+        RoomResponse response = toResponseWithAvailability(room, getRoomCapacityReservations(room.getId()));
+        response.setResidents(roomAssignmentRepository.findCurrentResidentsByRoom(
+                id, List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN), ContractStatus.ACTIVE));
+        return response;
     }
 
     public RoomResponse getRoomByIdForStudent(Long id, User user) {
