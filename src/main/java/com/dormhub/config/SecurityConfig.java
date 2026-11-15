@@ -1,4 +1,3 @@
-
 package com.dormhub.config;
 
 import com.dormhub.dto.response.ApiResponse;
@@ -40,15 +39,25 @@ public class SecurityConfig {
     @Value("${dormhub.cors.allowed-origins:http://localhost:5173,http://localhost:3000,https://dorm-hub-s8y9.vercel.app}")
     private List<String> allowedOrigins;
 
+    @Value("${dormhub.jwt.cookie-secure:true}")
+    private boolean cookieSecure;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtService, userRepository);
-        http.cors(cors ->
-                        cors.configurationSource(corsConfigurationSource())
-                )
+
+        // Cấu hình Cookie CSRF tương thích cross-site (Vercel <-> Render)
+        CookieCsrfTokenRepository csrfTokenRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfTokenRepository.setCookieCustomizer(cookie -> cookie
+                .sameSite(cookieSecure ? "None" : "Lax")
+                .secure(cookieSecure)
+                .path("/")
+        );
+
+        http.cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRepository(csrfTokenRepository)
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers(
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/payments/webhooks/sepay"),
@@ -61,7 +70,6 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
 
                 .exceptionHandling(exception -> exception
-
                         .authenticationEntryPoint((request, response, authException) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -97,14 +105,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhooks/sepay").permitAll()
                         .requestMatchers(HttpMethod.POST,
-                                        "/api/v1/auth/login",
-                                        "/api/v1/auth/verify-email",
-                                        "/api/v1/auth/resend-otp",
-                                        "/api/v1/auth/reset-password",
-                                        "/api/v1/auth/forgot-password",
-                                        "/api/v1/auth/logout",
-                                        "/api/v1/auth/refresh"
-                                ).permitAll()
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/verify-email",
+                                "/api/v1/auth/resend-otp",
+                                "/api/v1/auth/reset-password",
+                                "/api/v1/auth/forgot-password",
+                                "/api/v1/auth/logout",
+                                "/api/v1/auth/refresh"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/rooms/available", "/api/v1/rooms/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").hasRole("MANAGER")
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/change-password").hasAnyRole("STUDENT", "MANAGER")
@@ -119,11 +127,12 @@ public class SecurityConfig {
                                 "/api/v1/notifications/send-to-students").hasRole("MANAGER")
                         .requestMatchers("/api/v1/notifications/**").authenticated()
                         .anyRequest().authenticated()
-                        )
+                )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
