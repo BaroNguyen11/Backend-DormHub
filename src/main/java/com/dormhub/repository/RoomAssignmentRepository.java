@@ -2,6 +2,7 @@ package com.dormhub.repository;
 
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.dto.response.RoommateResponse;
+import com.dormhub.dto.response.RoomResidentResponse;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.RoomAssignmentStatus;
 import jakarta.persistence.LockModeType;
@@ -115,6 +116,20 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
             @Param("assignmentId") Long assignmentId);
 
     long countByRoom_IdAndStatusIn(Long roomId, Collection<RoomAssignmentStatus> statuses);
+
+    @Query("select new com.dormhub.dto.response.RoomResidentResponse("
+            + "student.id, coalesce(studentUser.fullName, student.fullName), "
+            + "student.studentCode, student.gender) "
+            + "from RoomAssignment assignment join assignment.student student "
+            + "left join student.user studentUser "
+            + "where assignment.room.id = :roomId "
+            + "and assignment.status in :assignmentStatuses "
+            + "and assignment.contract.status = :contractStatus "
+            + "order by student.studentCode")
+    List<RoomResidentResponse> findCurrentResidentsByRoom(
+            @Param("roomId") Long roomId,
+            @Param("assignmentStatuses") Collection<RoomAssignmentStatus> assignmentStatuses,
+            @Param("contractStatus") ContractStatus contractStatus);
 
     /**
      * Tìm tất cả sinh viên đang ở (ASSIGNED hoặc CHECKED_IN) trong một tòa nhà cụ thể.

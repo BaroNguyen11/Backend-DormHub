@@ -56,8 +56,8 @@ dormhub:
     cookie-secure: ${DORMHUB_COOKIE_SECURE:true}
 
   sepay:
-    api-key: ${DORMHUB_SEPAY_API_KEY:}
-    webhook-secret: ${DORMHUB_SEPAY_WEBHOOK_SECRET:}
+    api-key: ${DORMHUB_SEPAY_API_KEY}
+    webhook-secret: ${DORMHUB_SEPAY_WEBHOOK_SECRET}
     sync-min-interval-seconds: 10
     transactions:
       enabled: true
