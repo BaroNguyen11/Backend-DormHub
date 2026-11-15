@@ -1,7 +1,8 @@
 spring:
   config:
     import: optional:file:.env[.properties]
-
+  main:
+    lazy-initialization: true
   servlet:
     multipart:
       max-file-size: 10MB
@@ -18,12 +19,13 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
+    open-in-view: false
     show-sql: false
     properties:
       hibernate:
-        format_sql: true
-        generate_statistics: true
+        format_sql: false
+        generate_statistics: false
 
   mail:
     host: smtp.gmail.com
@@ -44,9 +46,9 @@ cloudinary:
 
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.stat: DEBUG
-    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: DEBUG
+    org.hibernate.SQL: WARN
+    org.hibernate.stat: WARN
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN
 
 
 dormhub:
@@ -74,3 +76,5 @@ dormhub:
     reference-character-type: ${DORMHUB_PAYMENT_REFERENCE_CHARACTER_TYPE:ALPHANUMERIC}
     ttl-minutes: ${DORMHUB_PAYMENT_TTL_MINUTES:15}
     qr-template: ${DORMHUB_PAYMENT_QR_TEMPLATE:compact}
+server:
+  port: ${PORT:8080}
