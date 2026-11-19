@@ -42,13 +42,14 @@ public class StudentController {
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String studentCode,
             @RequestParam(required = false) com.dormhub.entity.enums.UserStatus status,
+            @RequestParam(required = false) Boolean hasAccount,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "studentCode") String sortBy,
             @RequestParam(defaultValue = "ASC") String direction
     ) {
         Page<StudentProfileResponse> result = studentService.searchStudent(
-                name, studentCode, status, page, size, sortBy, direction
+                name, studentCode, status, hasAccount, page, size, sortBy, direction
         );
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách sinh viên thành công", result));
     }

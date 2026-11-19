@@ -117,6 +117,7 @@ public class StudentService {
             String name,
             String studentCode,
             UserStatus status,
+            Boolean hasAccount,
             int page,
             int size,
             String sortBy,
@@ -154,6 +155,11 @@ public class StudentService {
                 and(StudentSpecification.hasStudentCode(studentCode));
         if (status != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("user").get("status"), status));
+        }
+        if (hasAccount != null) {
+            spec = spec.and((root, query, cb) -> hasAccount
+                    ? cb.isNotNull(root.get("user"))
+                    : cb.isNull(root.get("user")));
         }
         // 6. Truy vấn và map sang Response
         Page<Student> students = studentRepository.findAll(spec, pageable);
