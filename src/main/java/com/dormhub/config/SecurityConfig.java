@@ -61,7 +61,8 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers(
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/payments/webhooks/sepay"),
-                                PathPatternRequestMatcher.withDefaults().matcher("/api/v1/auth/**")
+                                PathPatternRequestMatcher.withDefaults().matcher("/api/v1/auth/**"),
+                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/ai/chat")
                         )
                 )
                 .sessionManagement(session -> session
@@ -126,6 +127,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/notifications/send-to-students").hasRole("MANAGER")
                         .requestMatchers("/api/v1/notifications/**").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/ai/chat").authenticated()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
