@@ -10,6 +10,7 @@ import lombok.Getter;
 public class ContractDraftResponse {
     private final String title;
     private final String organizationNote;
+    private final ContractLandlordResponse landlord;
     private final String introduction;
     private final StudentProfileResponse student;
     private final RoomResponse room;

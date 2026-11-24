@@ -166,13 +166,17 @@ public class ContractService {
     }
 
     public ContractResponse getMyContract(Long userId, Long contractId) {
+        return contractMapper.toResponse(getMyContractEntity(userId, contractId));
+    }
+
+    public Contract getMyContractEntity(Long userId, Long contractId) {
         Student student = studentRepository.findByUserId(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
         Contract contract = findContract(contractId);
         if (!Objects.equals(contract.getStudent().getId(), student.getId())) {
             throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
         }
-        return contractMapper.toResponse(contract);
+        return contract;
     }
 
     public Page<ContractResponse> search(Long studentId, ContractStatus status, Pageable pageable) {

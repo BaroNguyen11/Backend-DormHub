@@ -63,6 +63,9 @@ public class DormApplicationService {
 
     @Transactional
     public DormApplicationResponse submit(Long userId, DormApplicationRequest request) {
+        if (!Boolean.TRUE.equals(request.getContractAccepted())) {
+            throw new AppException(ErrorCode.DORM_APPLICATION_CONTRACT_NOT_ACCEPTED);
+        }
         Student student = studentRepository.findByUserIdForUpdate(userId)
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
 

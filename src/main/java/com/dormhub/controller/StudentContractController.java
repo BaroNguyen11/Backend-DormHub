@@ -5,6 +5,8 @@ import com.dormhub.dto.response.ContractResponse;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.service.ContractService;
+import com.dormhub.service.ContractPdfService;
+import java.io.IOException;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -13,6 +15,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.CacheControl;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 public class StudentContractController {
 
     private final ContractService contractService;
+    private final ContractPdfService contractPdfService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ContractResponse>>> getMyContracts(
@@ -42,6 +48,18 @@ public class StudentContractController {
             @PathVariable @Positive Long id) {
         return ResponseEntity.ok(ApiResponse.success(
                 contractService.getMyContract(user.getId(), id)));
+    }
+
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> getMyContractPdf(
+            @AuthenticationPrincipal User user,
+            @PathVariable @Positive Long id) throws IOException {
+        byte[] pdf = contractPdfService.renderForStudent(user.getId(), id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=contract-" + id + ".pdf")
+                .cacheControl(CacheControl.noStore())
+                .body(pdf);
     }
 }
 

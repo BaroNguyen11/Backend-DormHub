@@ -1,6 +1,8 @@
 package com.dormhub.service;
 
+import com.dormhub.config.ContractLandlordProperties;
 import com.dormhub.dto.response.ContractDraftResponse;
+import com.dormhub.dto.response.ContractLandlordResponse;
 import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.User;
 import com.dormhub.exception.AppException;
@@ -18,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContractDraftService {
     private final StudentService studentService;
     private final RoomService roomService;
+    private final ContractLandlordProperties landlordProperties;
 
     public ContractDraftResponse getDraft(User user, Long roomId) {
         RoomResponse room = roomService.getRoomByIdForStudent(roomId, user);
@@ -29,7 +32,9 @@ public class ContractDraftService {
         BigDecimal monthlyRent = price.setScale(0, RoundingMode.HALF_UP);
         return ContractDraftResponse.builder()
                 .title("HỢP ĐỒNG THUÊ CHỖ Ở KÝ TÚC XÁ")
-                .organizationNote("Thông tin đơn vị quản lý, người đại diện và nơi lập hợp đồng sẽ được bổ sung khi hợp đồng được phát hành.")
+                .organizationNote("Bên A: " + landlordProperties.getName()
+                        + ", đại diện " + landlordProperties.getRepresentative() + ".")
+                .landlord(new ContractLandlordResponse(landlordProperties))
                 .introduction("Hai bên thống nhất giao kết hợp đồng thuê chỗ ở ký túc xá với các điều khoản sau:")
                 .student(studentService.getMyProfile(user.getId()))
                 .room(room)
@@ -77,4 +82,27 @@ public class ContractDraftService {
                     "6.1. Hai bên cam kết thực hiện các nội dung đã thỏa thuận. Nội quy ký túc xá và phụ lục được hai bên chấp thuận là bộ phận của hợp đồng.",
                     "6.2. Mọi sửa đổi, bổ sung phải được hai bên thống nhất. Dữ liệu trên DormHub phục vụ quản lý, tra cứu và đối soát; không mặc nhiên thay thế chữ ký hợp lệ của các bên.",
                     "6.3. Hợp đồng được lập thành 02 bản có giá trị như nhau, mỗi bên giữ 01 bản.")));
+
+    public List<ContractDraftResponse.Section> getOfficialSections() {
+        return SECTIONS.stream()
+                .map(section -> new ContractDraftResponse.Section(section.getHeading(),
+                        section.getParagraphs().stream().map(this::officialParagraph).toList()))
+                .toList();
+    }
+
+    private String officialParagraph(String paragraph) {
+        if (paragraph.startsWith("1.2.")) {
+            return "1.2. Thông tin tòa nhà, phòng, tầng, loại phòng và sức chứa được thể hiện tại phần thông tin chỗ ở của hợp đồng này.";
+        }
+        if (paragraph.startsWith("2.1.")) {
+            return "2.1. Ngày bắt đầu và ngày kết thúc thuê được thể hiện tại phần thông tin thuê của hợp đồng này.";
+        }
+        if (paragraph.startsWith("2.2.")) {
+            return "2.2. Tiền thuê theo tháng được thể hiện tại phần thông tin thuê của hợp đồng này.";
+        }
+        if (paragraph.startsWith("2.3.")) {
+            return "2.3. Tiền đặt cọc được thể hiện tại phần thông tin thuê của hợp đồng này.";
+        }
+        return paragraph;
+    }
 }
