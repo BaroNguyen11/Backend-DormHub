@@ -55,7 +55,7 @@ dormhub:
   jwt:
     secret: ${DORMHUB_JWT_SECRET}
     access-token-minutes: 15
-    cookie-secure: ${DORMHUB_COOKIE_SECURE:true}
+    cookie-secure: ${DORMHUB_COOKIE_SECURE:false}
 
   sepay:
     api-key: ${DORMHUB_SEPAY_API_KEY}

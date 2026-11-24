@@ -35,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class ContractService {
+    public static final int RENTAL_DURATION_MONTHS = 12;
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final List<ContractStatus> OPEN_CONTRACT_STATUSES =
@@ -126,7 +127,7 @@ public class ContractService {
         contract.setRoom(room);
         contract.setStudent(student);
         contract.setStartDate(startDate);
-        contract.setEndDate(startDate.plusMonths(12));
+        contract.setEndDate(startDate.plusMonths(RENTAL_DURATION_MONTHS));
         contract.setMonthlyRent(monthlyRent);
         contract.setDepositAmount(monthlyRent);
         contract.setDepositStatus(DepositStatus.UNPAID);

@@ -91,7 +91,7 @@ public class AuthController {
         ResponseCookie accessCookie = ResponseCookie
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .secure(cookieSecure)
                 .path("/")
                 .maxAge(Duration.ofMinutes(accessTokenMinutes))
@@ -99,7 +99,7 @@ public class AuthController {
         ResponseCookie refreshCookie = ResponseCookie
                 .from("refresh_token", result.getRefreshToken())
                 .httpOnly(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .secure(cookieSecure)
                 .path("/api/v1/auth")
                 .maxAge(Duration.ofDays(7))
@@ -178,7 +178,7 @@ public class AuthController {
                 .from("access_token", "")
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("None")
+                .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ZERO)
                 .build();
@@ -187,7 +187,7 @@ public class AuthController {
         ResponseCookie clearedRefreshCookie = ResponseCookie
                 .from("refresh_token", "")
                 .httpOnly(true)
-                .sameSite("None")
+                .sameSite("Lax")
                 .secure(cookieSecure)
                 .path("/api/v1/auth")
                 .maxAge(Duration.ZERO)
@@ -219,7 +219,7 @@ public class AuthController {
                 .from("access_token", result.getAccessToken())
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("None")
+                .sameSite("Lax")
                 .path("/")
                 .maxAge(Duration.ofMinutes(accessTokenMinutes))
                 .build();
@@ -228,7 +228,7 @@ public class AuthController {
                 .from("refresh_token", result.getRefreshToken())
                 .httpOnly(true)
                 .secure(cookieSecure)
-                .sameSite("None")
+                .sameSite("Lax")
                 .path("/api/v1/auth")
                 .maxAge(Duration.ofDays(7))
                 .build();
