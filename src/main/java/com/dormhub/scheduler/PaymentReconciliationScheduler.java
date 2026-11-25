@@ -29,11 +29,14 @@ public class PaymentReconciliationScheduler {
     // Chạy mỗi 10 phút để đối soát bù các giao dịch UNMATCHED trong vòng 24 giờ qua
     @Scheduled(cron = "${dormhub.payment.reconcile-cron:0 */10 * * * *}")
     public void retryUnmatchedTransactions() {
+        log.info("Scheduler PaymentReconciliationScheduler.retryUnmatchedTransactions START at={}", Instant.now());
+        try {
         Instant since = Instant.now().minus(24, ChronoUnit.HOURS);
         List<SepayTransaction> unmatched = transactionRepository
                 .findByStatusAndReceivedAtAfter(SepayTransactionStatus.UNMATCHED, since);
 
         if (unmatched.isEmpty()) {
+            log.info("Payment reconciliation candidates=0, matched=0");
             return;
         }
 
@@ -50,8 +53,9 @@ public class PaymentReconciliationScheduler {
                 log.warn("Lỗi khi đối soát lại giao dịch #{}: {}", tx.getSepayTransactionId(), e.getMessage());
             }
         }
-        if (matchedCount > 0) {
-            log.info("Đối soát bù hoàn tất: khớp thành công {}/{} giao dịch", matchedCount, unmatched.size());
+        log.info("Payment reconciliation candidates={}, matched={}", unmatched.size(), matchedCount);
+        } finally {
+            log.info("Scheduler PaymentReconciliationScheduler.retryUnmatchedTransactions END at={}", Instant.now());
         }
     }
 }

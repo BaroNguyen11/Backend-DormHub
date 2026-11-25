@@ -41,33 +41,50 @@ public class ContractLifecycleScheduler {
     private final InvoiceRepository invoiceRepository;
     private final ContractService contractService;
 
-    @Scheduled(cron = "0 */10 * * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${dormhub.scheduler.contract.unpaid-deposits-cron:0 */10 * * * *}", zone = "Asia/Ho_Chi_Minh")
     public void expireUnpaidDeposits() {
+        log.info("Scheduler ContractLifecycleScheduler.expireUnpaidDeposits START at={}", java.time.Instant.now());
+        try {
         LocalDateTime cutoff = LocalDateTime.now(BUSINESS_ZONE)
                 .minusHours(ContractService.DEPOSIT_RECONCILIATION_GRACE_HOURS);
-        for (Long invoiceId : invoiceRepository.findOverdueDepositIds(
-                InvoiceType.DEPOSIT, InvoiceStatus.UNPAID, ContractStatus.PENDING, cutoff)) {
+        List<Long> invoiceIds = invoiceRepository.findOverdueDepositIds(
+                InvoiceType.DEPOSIT, InvoiceStatus.UNPAID, ContractStatus.PENDING, cutoff);
+        int evaluated = 0;
+        int failed = 0;
+        for (Long invoiceId : invoiceIds) {
             try {
                 contractService.expireUnpaidDeposit(invoiceId);
+                evaluated++;
             } catch (Exception error) {
+                failed++;
                 log.warn("Không thể xử lý hóa đơn cọc quá hạn #{}: {}", invoiceId, error.getMessage());
             }
         }
-    }
-
-    @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Ho_Chi_Minh")
-    @Transactional
-    public void expireOverdueContracts() {
-        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
-        int expired = contractRepository.bulkExpireOverdueContracts(
-                ContractStatus.ACTIVE, ContractStatus.EXPIRED, now);
-        if (expired > 0) {
-            log.info("Đã tự động hết hạn {} hợp đồng ACTIVE quá endDate", expired);
+        log.info("Deposit expiry candidates={}, evaluated={}, failed={} (evaluated does not imply cancelled)",
+                invoiceIds.size(), evaluated, failed);
+        } finally {
+            log.info("Scheduler ContractLifecycleScheduler.expireUnpaidDeposits END at={}", java.time.Instant.now());
         }
     }
 
-    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${dormhub.scheduler.contract.expire-cron:0 0 1 * * *}", zone = "Asia/Ho_Chi_Minh")
+    @Transactional
+    public void expireOverdueContracts() {
+        log.info("Scheduler ContractLifecycleScheduler.expireOverdueContracts START at={}", java.time.Instant.now());
+        try {
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        int expired = contractRepository.bulkExpireOverdueContracts(
+                ContractStatus.ACTIVE, ContractStatus.EXPIRED, now);
+        log.info("Contract expiry updated={}", expired);
+        } finally {
+            log.info("Scheduler ContractLifecycleScheduler.expireOverdueContracts END at={}", java.time.Instant.now());
+        }
+    }
+
+    @Scheduled(cron = "${dormhub.scheduler.contract.reminder-cron:0 0 9 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void remindExpiringContracts() {
+        log.info("Scheduler ContractLifecycleScheduler.remindExpiringContracts START at={}", java.time.Instant.now());
+        try {
         LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
         LocalDateTime sevenDaysLater = now.plusDays(7);
         List<Contract> expiring = contractRepository.findAllByStatusAndEndDateBetween(
@@ -93,8 +110,9 @@ public class ContractLifecycleScheduler {
                     contract.getStudent().getUser().getId());
             sent++;
         }
-        if (sent > 0) {
-            log.info("Đã gửi {} thông báo nhắc hợp đồng sắp hết hạn (t-7 ngày)", sent);
+        log.info("Contract reminder candidates={}, sent={}", expiring.size(), sent);
+        } finally {
+            log.info("Scheduler ContractLifecycleScheduler.remindExpiringContracts END at={}", java.time.Instant.now());
         }
     }
 }

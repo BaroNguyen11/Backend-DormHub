@@ -14,6 +14,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
 
 @Component
 public class BillingScheduler {
@@ -26,6 +27,8 @@ public class BillingScheduler {
     private final TaskScheduler taskScheduler;
     private final DistributedLockRepository distributedLockRepository;
     private final AtomicBoolean applicationReady = new AtomicBoolean();
+    @Value("${billing.room-fee.reconcile-on-startup:true}")
+    private boolean reconcileOnStartup;
 
     public BillingScheduler(BillingBatchService billingBatchService,
                             TaskScheduler taskScheduler,
@@ -39,25 +42,31 @@ public class BillingScheduler {
     public void reconcileCurrentMonth(AvailabilityChangeEvent<ReadinessState> event) {
         if (event.getState() == ReadinessState.ACCEPTING_TRAFFIC) {
             applicationReady.set(true);
-            taskScheduler.schedule(this::runCurrentMonth, Instant.now());
+            if (reconcileOnStartup) {
+                taskScheduler.schedule(() -> runCurrentMonth("reconcileCurrentMonth"), Instant.now());
+            } else {
+                log.info("Scheduler BillingScheduler.reconcileCurrentMonth disabled on startup");
+            }
         }
     }
 
     @Scheduled(cron = "${billing.room-fee.cron:0 0 1 1 * *}", zone = "Asia/Ho_Chi_Minh")
     public void generateMonthlyRoomFees() {
         if (applicationReady.get()) {
-            runCurrentMonth();
+            runCurrentMonth("generateMonthlyRoomFees");
         }
     }
 
     @Scheduled(cron = "${billing.room-fee.reconcile-cron:0 0 2 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void reconcileDailyRoomFees() {
         if (applicationReady.get()) {
-            runCurrentMonth();
+            runCurrentMonth("reconcileDailyRoomFees");
         }
     }
 
-    private void runCurrentMonth() {
+    private void runCurrentMonth(String trigger) {
+        log.info("Scheduler BillingScheduler.{} START at={}", trigger, Instant.now());
+        try {
         // Lock giữ trên đúng 1 connection suốt tác vụ, tự nhả an toàn cả khi lỗi lẫn khi JVM chết
         boolean executed = distributedLockRepository.runWithLock(BILLING_LOCK_KEY, () -> {
             YearMonth current = YearMonth.now(BUSINESS_ZONE);
@@ -71,6 +80,9 @@ public class BillingScheduler {
         });
         if (!executed) {
             log.info("Bỏ qua tiến trình lập hóa đơn tháng: một instance khác đang thực thi.");
+        }
+        } finally {
+            log.info("Scheduler BillingScheduler.{} END at={}", trigger, Instant.now());
         }
     }
 }

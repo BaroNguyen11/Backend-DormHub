@@ -19,14 +19,19 @@ public class TokenCleanupTask {
     private final EmailVerificationRepository emailVerificationRepository;
 
     // Chạy định kỳ vào 02:00 sáng mỗi ngày
-    @Scheduled(cron = "0 0 2 * * ?")
+    @Scheduled(cron = "${dormhub.scheduler.token.cleanup-cron:0 0 2 * * ?}")
     @Transactional
     public void cleanupExpiredTokens() {
+        log.info("Scheduler TokenCleanupTask.cleanupExpiredTokens START at={}", java.time.Instant.now());
+        try {
         LocalDateTime now = LocalDateTime.now();
 
         int deletedTokens = refreshTokenRepository.deleteAllExpiredOrRevoked(now);
         int deletedOtps = emailVerificationRepository.deleteAllExpiredOrUsed(now);
 
         log.info("Dọn dẹp DB hoàn tất: Đã xóa {} refresh tokens và {} OTPs hết hạn.", deletedTokens, deletedOtps);
+        } finally {
+            log.info("Scheduler TokenCleanupTask.cleanupExpiredTokens END at={}", java.time.Instant.now());
+        }
     }
 }
