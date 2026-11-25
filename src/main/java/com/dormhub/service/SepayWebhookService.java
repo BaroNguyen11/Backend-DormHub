@@ -133,7 +133,7 @@ public class SepayWebhookService {
         payment.setPaidAt(transactionAt);
         cancelOtherPendingPayments(invoice.getInvoiceId(), payment.getPaymentId());
         if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
-            depositService.confirmDepositPaid(invoice.getInvoiceId());
+            depositService.confirmDepositPaid(invoice.getInvoiceId(), transactionAt);
         } else {
             invoice.setStatus(InvoiceStatus.PAID);
         }
@@ -215,7 +215,7 @@ public class SepayWebhookService {
         payment.setPaidAt(transactionAt);
         cancelOtherPendingPayments(invoice.getInvoiceId(), payment.getPaymentId());
         if (invoice.getInvoiceType() == InvoiceType.DEPOSIT) {
-            depositService.confirmDepositPaid(invoice.getInvoiceId());
+            depositService.confirmDepositPaid(invoice.getInvoiceId(), transactionAt);
         } else {
             invoice.setStatus(InvoiceStatus.PAID);
         }

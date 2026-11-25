@@ -48,6 +48,8 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
     Optional<RoomAssignment> findFirstByContract_ContractIdOrderByAssignmentIdDesc(
             Long contractId);
 
+    Optional<RoomAssignment> findTopByContract_ContractIdOrderByAssignmentIdDesc(Long contractId);
+
     @Query("select case when count(assignment) > 0 then true else false end "
             + "from RoomAssignment assignment "
             + "where assignment.room.id = :roomId "

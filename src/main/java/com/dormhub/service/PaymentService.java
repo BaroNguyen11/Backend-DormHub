@@ -23,6 +23,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.time.ZoneId;
 import org.springframework.stereotype.Service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -34,6 +35,7 @@ public class PaymentService {
     private static final String ALPHANUMERIC = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int MAX_REFERENCE_ATTEMPTS = 16;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private final InvoiceRepository invoiceRepository;
     private final PaymentRepository paymentRepository;
@@ -68,6 +70,13 @@ public class PaymentService {
         }
         if (invoice.getStatus() != InvoiceStatus.UNPAID) {
             throw new AppException(ErrorCode.PAYMENT_CONFLICT);
+        }
+        Instant depositDeadline = invoice.getInvoiceType() == InvoiceType.DEPOSIT
+                && invoice.getContract() != null
+                && invoice.getDueDate() != null
+                ? invoice.getDueDate().atZone(BUSINESS_ZONE).toInstant() : null;
+        if (depositDeadline != null && !Instant.now().isBefore(depositDeadline)) {
+            throw new AppException(ErrorCode.PAYMENT_CONFLICT, "Đã quá hạn thanh toán tiền cọc");
         }
 
         BigDecimal amount = invoice.getTotalAmount();
@@ -104,8 +113,12 @@ public class PaymentService {
         }
 
         String reference = generateUnusedReference();
+        Instant expiresAt = now.plus(properties.getTtl());
+        if (depositDeadline != null && expiresAt.isAfter(depositDeadline)) {
+            expiresAt = depositDeadline;
+        }
         Payment payment = new Payment(invoice, reference, amount.setScale(0, RoundingMode.UNNECESSARY),
-                properties.getBankCode(), properties.getAccountNumber(), now.plus(properties.getTtl()));
+                properties.getBankCode(), properties.getAccountNumber(), expiresAt);
         Payment saved = paymentRepository.saveAndFlush(payment);
         return new InitiationResult(toResponse(saved, invoice, now), true);
     }

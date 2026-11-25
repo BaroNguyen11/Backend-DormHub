@@ -12,12 +12,14 @@ import com.dormhub.entity.enums.CheckoutRequestStatus;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RenewalStatus;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.RenewalMapper;
 import com.dormhub.repository.CheckoutRequestRepository;
 import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.RenewalRequestRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.StudentRepository;
 import com.dormhub.repository.UserRepository;
 import java.time.LocalDateTime;
@@ -44,6 +46,7 @@ public class RenewalService {
     private final UserRepository userRepository;
     private final RenewalMapper renewalMapper;
     private final NotificationService notificationService;
+    private final RoomAssignmentRepository roomAssignmentRepository;
 
     public RenewalService(ContractRepository contractRepository,
                           RenewalRequestRepository renewalRequestRepository,
@@ -51,7 +54,8 @@ public class RenewalService {
                           StudentRepository studentRepository,
                           UserRepository userRepository,
                           RenewalMapper renewalMapper,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          RoomAssignmentRepository roomAssignmentRepository) {
         this.contractRepository = contractRepository;
         this.renewalRequestRepository = renewalRequestRepository;
         this.checkoutRequestRepository = checkoutRequestRepository;
@@ -59,6 +63,7 @@ public class RenewalService {
         this.userRepository = userRepository;
         this.renewalMapper = renewalMapper;
         this.notificationService = notificationService;
+        this.roomAssignmentRepository = roomAssignmentRepository;
     }
 
     @Transactional
@@ -71,6 +76,11 @@ public class RenewalService {
         Contract contract = getContractForUpdate(contractId);
         ensureStudentOwnsContract(contract, student.getId());
         ensureActiveContract(contract);
+        if (!roomAssignmentRepository.existsByContract_ContractIdAndStatusIn(
+                contractId, List.of(RoomAssignmentStatus.CHECKED_IN))) {
+            throw new AppException(ErrorCode.RENEWAL_INVALID_STATUS,
+                    "Chỉ có thể gia hạn sau khi đã nhận phòng");
+        }
         ensureRequestedEndDateIsAfterCurrent(contract, request.getRequestedEndDate());
         // Cross-validation: không cho nộp gia hạn khi còn yêu cầu trả phòng đang mở
         ensureNoOpenCheckoutRequest(contractId);

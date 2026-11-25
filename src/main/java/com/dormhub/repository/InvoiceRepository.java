@@ -73,4 +73,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
             Long userId, InvoiceType invoiceType, InvoiceStatus status);
     
     long countByStatus(InvoiceStatus status);
+
+    @Query("select invoice.invoiceId from Invoice invoice where invoice.invoiceType = :type "
+            + "and invoice.status = :status and invoice.contract.status = :contractStatus "
+            + "and invoice.dueDate < :cutoff "
+            + "order by invoice.invoiceId")
+    List<Long> findOverdueDepositIds(@Param("type") InvoiceType type,
+            @Param("status") InvoiceStatus status,
+            @Param("contractStatus") com.dormhub.entity.enums.ContractStatus contractStatus,
+            @Param("cutoff") LocalDateTime cutoff);
 }

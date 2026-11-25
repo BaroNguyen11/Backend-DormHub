@@ -46,20 +46,21 @@ public class ContractDraftService {
                 .build();
     }
 
-    // Nội dung Điều 1-6 theo mẫu Hop_dong_KTX_DormHub.pdf; riêng 2.1 nêu rõ ngày thuê chưa được xác định ở giai đoạn dự thảo.
+    // Nội dung Điều 1-6 theo mẫu Hop_dong_KTX_DormHub.pdf; ngày dự thảo chỉ là dự kiến.
     private static final List<ContractDraftResponse.Section> SECTIONS = List.of(
             new ContractDraftResponse.Section("Điều 1. Nội dung hợp đồng", List.of(
                     "1.1. Bên A bố trí cho Bên B một chỗ ở tại ký túc xá theo hồ sơ đăng ký đã được phê duyệt trên hệ thống DormHub.",
                     "1.2. Thông tin tòa nhà, phòng, tầng, loại phòng và sức chứa được thể hiện tại phần thông tin phòng của bản dự thảo này.",
                     "1.3. Bên B sử dụng chỗ ở đúng mục đích, không tự ý chuyển phòng hoặc chuyển giao quyền sử dụng chỗ ở cho người khác. Việc thay đổi chỗ ở phải được Bên A chấp thuận.")),
             new ContractDraftResponse.Section("Điều 2. Thời hạn, giá thuê và phương thức thanh toán", List.of(
-                    "2.1. Thời hạn thuê là 12 tháng. Ngày bắt đầu và ngày kết thúc cụ thể được xác định khi quản lý duyệt đơn đăng ký.",
+                    "2.1. Ngày bắt đầu thuê là ngày nhận phòng do Bên B chọn và xác nhận sau khi đóng cọc. Thời hạn hiển thị trên hợp đồng PENDING chỉ là dự kiến và sẽ được cập nhật khi Bên B xác nhận. Nếu bắt đầu từ ngày 1 đến 15, hợp đồng kết thúc cuối tháng thứ 12; nếu bắt đầu từ ngày 16 trở đi, tháng đầu là kỳ lẻ, sau đó là 12 tháng trọn vẹn.",
                     "2.2. Tiền thuê theo tháng được thể hiện tại phần thông tin thuê của bản dự thảo này.",
                     "2.3. Tiền đặt cọc được thể hiện tại phần thông tin thuê của bản dự thảo này.",
-                    "2.4. Bên B thanh toán tiền đặt cọc theo hóa đơn đặt cọc và thời hạn được thông báo trên DormHub. Tiền đặt cọc được đối soát khi trả phòng, sau khi xác định các khoản phải thanh toán và bồi thường (nếu có) theo thỏa thuận của hai bên.",
-                    "2.5. Tiền thuê được lập hóa đơn hằng tháng theo đơn giá đã thỏa thuận trong hợp đồng. Tiền điện và nước không nằm trong tiền thuê tháng; được tính theo mức tiêu thụ thực tế của phòng và đơn giá áp dụng tại kỳ ghi chỉ số. Các khoản dịch vụ khác, nếu có, phải được thông báo rõ ràng.",
+                    "2.4. Bên B thanh toán tiền đặt cọc trong 48 giờ kể từ khi đơn được duyệt. Tiền đặt cọc được đối soát khi trả phòng, sau khi xác định các khoản phải thanh toán và bồi thường (nếu có) theo thỏa thuận của hai bên.",
+                    "2.5. Tiền thuê tháng đầu được tính từ ngày bắt đầu thuê ghi trên hợp đồng, bao gồm ngày đó: tiền thuê tháng × số ngày thuê trong tháng / số ngày thực tế của tháng, làm tròn đến đồng Việt Nam. Các tháng trọn vẹn tính đủ tiền thuê tháng. Tiền điện và nước được tính riêng theo mức tiêu thụ thực tế và đơn giá áp dụng.",
                     "2.6. Bên B thanh toán theo số tiền, nội dung chuyển khoản và hạn thanh toán ghi trên từng hóa đơn. Hệ thống hỗ trợ thanh toán chuyển khoản qua mã VietQR và ghi nhận kết quả sau khi giao dịch được xác nhận. Bên B có thể tra cứu hóa đơn và lịch sử thanh toán trên DormHub.",
-                    "2.7. Việc điều chỉnh giá thuê, xử lý công nợ, phân bổ chi phí sử dụng chung và hoàn trả tiền đặt cọc thực hiện theo thỏa thuận và quy định được Bên A công bố, không tự động thay đổi đơn giá đã cam kết.")),
+                    "2.7. Việc điều chỉnh giá thuê, xử lý công nợ, phân bổ chi phí sử dụng chung và hoàn trả tiền đặt cọc thực hiện theo thỏa thuận và quy định được Bên A công bố, không tự động thay đổi đơn giá đã cam kết.",
+                    "2.8. Sau khi đóng cọc, Bên B chọn và xác nhận ngày nhận phòng trong vòng 7 ngày tính từ ngày thanh toán. Nếu quá hạn do Bên B, Bên A xem xét hủy suất và xử lý tiền cọc sau khi kiểm tra nguyên nhân. Lỗi bàn giao của ký túc xá hoặc lỗi hệ thống không được coi là lỗi của Bên B.")),
             new ContractDraftResponse.Section("Điều 3. Gia hạn, chuyển phòng và chấm dứt hợp đồng", List.of(
                     "3.1. Khi có nhu cầu tiếp tục lưu trú, Bên B gửi yêu cầu gia hạn trên DormHub để Bên A xem xét. Việc gửi yêu cầu không đồng nghĩa với việc gia hạn đã được chấp thuận.",
                     "3.2. Khi có nhu cầu chuyển phòng, Bên B gửi yêu cầu chuyển phòng. Việc chuyển phòng chỉ được thực hiện sau khi được phê duyệt và hoàn thành thủ tục bàn giao theo hướng dẫn của Bên A.",
@@ -95,7 +96,7 @@ public class ContractDraftService {
             return "1.2. Thông tin tòa nhà, phòng, tầng, loại phòng và sức chứa được thể hiện tại phần thông tin chỗ ở của hợp đồng này.";
         }
         if (paragraph.startsWith("2.1.")) {
-            return "2.1. Ngày bắt đầu và ngày kết thúc thuê được thể hiện tại phần thông tin thuê của hợp đồng này.";
+            return "2.1. Ngày bắt đầu và ngày kết thúc thuê được thể hiện tại phần thông tin thuê của hợp đồng này. Nếu bắt đầu từ ngày 1 đến 15, tháng đầu là tháng thứ nhất và hợp đồng kết thúc cuối tháng thứ 12. Nếu bắt đầu từ ngày 16 trở đi, tháng đầu là kỳ lẻ bổ sung, sau đó là 12 tháng trọn vẹn.";
         }
         if (paragraph.startsWith("2.2.")) {
             return "2.2. Tiền thuê theo tháng được thể hiện tại phần thông tin thuê của hợp đồng này.";

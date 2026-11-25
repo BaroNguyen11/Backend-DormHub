@@ -167,7 +167,9 @@ public class DormApplicationService {
             int page,
             int size) {
         validatePage(page, size);
-        Pageable pageable = pageable(page, size);
+        Pageable pageable = status == DormApplicationStatus.PENDING
+                ? PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "requestDate"))
+                : pageable(page, size);
         Page<DormApplication> applications = status == null
                 ? dormApplicationRepository.findAll(pageable)
                 : dormApplicationRepository.findAllByStatus(status, pageable);

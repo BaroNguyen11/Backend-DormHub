@@ -15,6 +15,7 @@ import com.dormhub.exception.ErrorCode;
 import com.dormhub.repository.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import org.springframework.stereotype.Service;
@@ -29,18 +30,15 @@ public class DepositService {
     private final InvoiceCreationLockRepository invoiceCreationLockRepository;
     private final NotificationService notificationService;
     private final RoomAssignmentService roomAssignmentService;
-    private final InvoiceService invoiceService;
 
     public DepositService(InvoiceRepository invoiceRepository,
                           InvoiceCreationLockRepository invoiceCreationLockRepository,
                           NotificationService notificationService,
-                          RoomAssignmentService roomAssignmentService,
-                          InvoiceService invoiceService) {
+                          RoomAssignmentService roomAssignmentService) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.notificationService = notificationService;
         this.roomAssignmentService = roomAssignmentService;
-        this.invoiceService = invoiceService;
     }
 
     @Transactional
@@ -68,7 +66,7 @@ public class DepositService {
         invoice.setInvoiceType(InvoiceType.DEPOSIT);
         invoice.setContract(contract);
         invoice.setIssueDate(LocalDateTime.now(BUSINESS_ZONE));
-        invoice.setDueDate(contract.getStartDate());
+        invoice.setDueDate(contract.getDormApplication().getProcessedAt().plusHours(48));
         invoice.setStatus(InvoiceStatus.UNPAID);
         invoice.setTotalAmount(contract.getDepositAmount());
 
@@ -87,7 +85,7 @@ public class DepositService {
 
     // Called by the payment flow only after a successful payment has been recorded.
     @Transactional
-    public DepositFlowResponse confirmDepositPaid(Long invoiceId) {
+    public DepositFlowResponse confirmDepositPaid(Long invoiceId, Instant paidAt) {
         if (invoiceId == null || invoiceId <= 0) {
             throw new AppException(ErrorCode.DEPOSIT_INVALID, "invoiceId phải là số dương");
         }
@@ -103,7 +101,7 @@ public class DepositService {
         }
 
         if (invoice.getStatus() == InvoiceStatus.PAID
-                && contract.getStatus() == ContractStatus.ACTIVE
+                && (contract.getStatus() == ContractStatus.PENDING || contract.getStatus() == ContractStatus.ACTIVE)
                 && contract.getDepositStatus() == DepositStatus.HELD) {
             return toResponse(contract, invoice);
         }
@@ -116,20 +114,20 @@ public class DepositService {
             throw new AppException(ErrorCode.DEPOSIT_CONFLICT,
                     "Hóa đơn hoặc hợp đồng không còn ở trạng thái chờ thanh toán cọc");
         }
+        if (invoice.getDueDate() != null
+                && LocalDateTime.ofInstant(paidAt, BUSINESS_ZONE).isAfter(invoice.getDueDate())) {
+            throw new AppException(ErrorCode.DEPOSIT_CONFLICT, "Đã quá hạn thanh toán tiền cọc");
+        }
 
         invoice.setStatus(InvoiceStatus.PAID);
-        contract.setStatus(ContractStatus.ACTIVE);
         contract.setDepositStatus(DepositStatus.HELD);
         roomAssignmentService.assign(contract.getContractId());
-
-        // P0: sinh ngay hóa đơn tiền phòng tháng đầu theo tỷ lệ ngày ở (proration)
-        invoiceService.createFirstMonthRoomFeeIfAbsent(contract);
 
         if (contract.getStudent() != null && contract.getStudent().getUser() != null) {
             notificationService.sendNotification(
                     NotificationType.CONTRACT_ACTIVATED,
-                    "Hợp đồng đã được kích hoạt",
-                    String.format("Thanh toán tiền cọc thành công. Hợp đồng #%d đã ACTIVE và bạn đã được phân phòng.",
+                    "Đã ghi nhận tiền cọc",
+                    String.format("Thanh toán tiền cọc thành công. Hợp đồng #%d đang chờ bạn xác nhận ngày nhận phòng.",
                             contract.getContractId()),
                     invoice.getInvoiceId(),
                     contract.getStudent().getUser().getId());

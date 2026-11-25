@@ -178,42 +178,23 @@ public class InvoiceService {
      * P0 - Tiền phòng tháng đầu theo tỷ lệ ngày ở (proration):
      * thành tiền = monthlyRent × effectiveDays / daysInMonth (HALF_UP, 0 chữ số).
      * Được gọi khi hợp đồng kích hoạt (cọc hợp lệ) để không mất doanh thu kỳ đầu.
-     * Idempotent: bỏ qua nếu hợp đồng đã có hóa đơn cho tháng bắt đầu.
+     * Chỉ phát hành khi đã đến ngày bắt đầu thuê; bỏ qua nếu kỳ đầu đã có hóa đơn.
      */
     @Transactional
     public void createFirstMonthRoomFeeIfAbsent(Contract contract) {
         if (contract == null || contract.getContractId() == null
-                || contract.getStartDate() == null || contract.getMonthlyRent() == null) {
+                || contract.getStartDate() == null || contract.getMonthlyRent() == null
+                || contract.getStartDate().toLocalDate().isAfter(LocalDate.now(BUSINESS_ZONE))) {
             return;
         }
-        YearMonth startMonth = YearMonth.from(contract.getStartDate());
-        if (invoiceRepository.existsByContract_ContractIdAndBillingMonth(contract.getContractId(), startMonth)) {
-            return;
-        }
-        LocalDate startDate = contract.getStartDate().toLocalDate();
+        createRoomFeeIfAbsent(contract.getContractId(), YearMonth.from(contract.getStartDate()));
+    }
+
+    public static BigDecimal calculateFirstMonthRent(BigDecimal monthlyRent, LocalDate startDate) {
         int daysInMonth = startDate.lengthOfMonth();
         int effectiveDays = daysInMonth - startDate.getDayOfMonth() + 1;
-
-        BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
-        BigDecimal amount = effectiveDays >= daysInMonth
-                ? rent
-                : rent.multiply(BigDecimal.valueOf(effectiveDays))
-                        .divide(BigDecimal.valueOf(daysInMonth), 0, java.math.RoundingMode.HALF_UP);
-
-        Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, startMonth, amount);
-        invoice.setContract(contract);
-        String description = effectiveDays >= daysInMonth
-                ? "Tiền phòng tháng " + startMonth
-                : "Tiền phòng tháng " + startMonth + " (tính theo ngày ở: " + effectiveDays + "/" + daysInMonth + " ngày)";
-        attachDetail(invoice, newDetail(InvoiceItemType.ROOM, description, BigDecimal.ONE, amount, amount));
-        try {
-            Invoice saved = invoiceRepository.saveAndFlush(invoice);
-            notifyInvoiceCreated(saved);
-            log.info("Đã tạo hóa đơn tiền phòng tháng đầu: contractId={}, month={}, amount={}",
-                    contract.getContractId(), startMonth, amount);
-        } catch (DataIntegrityViolationException exception) {
-            throw mapIntegrityError(exception);
-        }
+        return monthlyRent.multiply(BigDecimal.valueOf(effectiveDays))
+                .divide(BigDecimal.valueOf(daysInMonth), 0, java.math.RoundingMode.HALF_UP);
     }
 
     private void notifyInvoiceCreated(Invoice invoice) {
@@ -238,6 +219,8 @@ public class InvoiceService {
         LocalDate first = month.atDay(1);
         LocalDate last = month.atEndOfMonth();
         if (contract.getStatus() != ContractStatus.ACTIVE
+                || contract.getStartDate() == null || contract.getEndDate() == null
+                || contract.getStartDate().toLocalDate().isAfter(LocalDate.now(BUSINESS_ZONE))
                 || contract.getStartDate().toLocalDate().isAfter(last)
                 || contract.getEndDate().toLocalDate().isBefore(first)) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Contract is not active in the billing month");
@@ -248,10 +231,15 @@ public class InvoiceService {
     }
 
     private InvoiceResponse saveRoomFeeInvoice(Contract contract, YearMonth month) {
-        BigDecimal rent = contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
+        LocalDate start = contract.getStartDate().toLocalDate();
+        boolean firstMonth = YearMonth.from(start).equals(month);
+        BigDecimal rent = firstMonth
+                ? calculateFirstMonthRent(contract.getMonthlyRent(), start)
+                : contract.getMonthlyRent().setScale(0, java.math.RoundingMode.HALF_UP);
         Invoice invoice = newMonthlyInvoice(InvoiceType.ROOM_FEE, month, rent);
         invoice.setContract(contract);
-        attachDetail(invoice, newDetail(InvoiceItemType.ROOM, "Room rent", BigDecimal.ONE, rent, rent));
+        String description = firstMonth ? "Tiền phòng tháng đầu (tính từ " + start + ")" : "Room rent";
+        attachDetail(invoice, newDetail(InvoiceItemType.ROOM, description, BigDecimal.ONE, rent, rent));
         try {
             Invoice saved = invoiceRepository.saveAndFlush(invoice);
             notifyInvoiceCreated(saved);

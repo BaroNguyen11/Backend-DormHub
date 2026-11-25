@@ -25,6 +25,11 @@ public class BillingBatchService {
         this.invoiceService = invoiceService;
     }
 
+    public YearMonth earliestActiveMonth() {
+        LocalDateTime earliest = contractRepository.findEarliestActiveStart();
+        return earliest == null ? null : YearMonth.from(earliest);
+    }
+
     public void generateRoomFees(YearMonth month) {
         long created = 0;
         long skipped = 0;
@@ -41,15 +46,12 @@ public class BillingBatchService {
             while (afterId < highestId) {
                 List<Long> contractIds = contractRepository.findEligibleIdsAfter(
                         afterId, highestId, ContractStatus.ACTIVE, monthStart, nextMonthStart,
+                        LocalDateTime.now(BUSINESS_ZONE),
                         PageRequest.of(0, PAGE_SIZE));
                 if (contractIds.isEmpty()) {
                     break;
                 }
                 for (Long contractId : contractIds) {
-                    if (!month.equals(YearMonth.now(BUSINESS_ZONE))) {
-                        log.warn("ROOM_FEE billing stopped after the billing month ended: month={}", month);
-                        return;
-                    }
                     afterId = contractId;
                     try {
                         if (invoiceService.createRoomFeeIfAbsent(contractId, month)) {

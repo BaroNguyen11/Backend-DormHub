@@ -8,6 +8,7 @@ import com.dormhub.entity.Room;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.User;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DepositStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import java.io.ByteArrayOutputStream;
@@ -64,7 +65,9 @@ public class ContractPdfService {
                 layout.space(18);
                 layout.center("HỢP ĐỒNG THUÊ CHỖ Ở KÝ TÚC XÁ", 15, true);
                 layout.center("Số: " + contract.getContractId(), 10, false);
-                layout.center("HỢP ĐỒNG ĐÃ PHÁT HÀNH", 9, true);
+                layout.center(contract.getStatus() == ContractStatus.PENDING
+                        ? "HỢP ĐỒNG CHỜ XÁC NHẬN THỜI HẠN THUÊ"
+                        : "HỢP ĐỒNG ĐÃ XÁC NHẬN THỜI HẠN THUÊ", 9, true);
                 layout.space(16);
 
                 layout.heading("BÊN A - ĐƠN VỊ QUẢN LÝ KÝ TÚC XÁ (BÊN CHO THUÊ)");
@@ -102,12 +105,16 @@ public class ContractPdfService {
                     case EIGHT_BED -> "Phòng 8 người";
                 });
                 layout.field("Sức chứa", room.getCapacity() + " sinh viên");
-                layout.field("Ngày bắt đầu", date(contract.getStartDate()));
-                layout.field("Ngày kết thúc", date(contract.getEndDate()));
+                layout.field(contract.getStatus() == ContractStatus.PENDING
+                        ? "Ngày bắt đầu dự kiến" : "Ngày bắt đầu", date(contract.getStartDate()));
+                layout.field(contract.getStatus() == ContractStatus.PENDING
+                        ? "Ngày kết thúc dự kiến" : "Ngày kết thúc", date(contract.getEndDate()));
                 layout.field("Tiền thuê mỗi tháng", money(contract.getMonthlyRent()));
                 layout.field("Tiền đặt cọc", money(contract.getDepositAmount()));
                 layout.field("Trạng thái hợp đồng", switch (contract.getStatus()) {
-                    case PENDING -> "Chờ thanh toán tiền cọc";
+                    case PENDING -> contract.getDepositStatus() == DepositStatus.HELD
+                            ? "Đã đóng cọc, chờ xác nhận ngày nhận phòng"
+                            : "Chờ thanh toán tiền cọc";
                     case ACTIVE -> "Đang hiệu lực";
                     default -> contract.getStatus().name();
                 });

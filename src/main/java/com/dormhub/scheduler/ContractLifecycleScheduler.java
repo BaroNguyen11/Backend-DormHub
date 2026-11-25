@@ -2,10 +2,14 @@ package com.dormhub.scheduler;
 
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.InvoiceStatus;
+import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.NotificationRepository;
 import com.dormhub.service.NotificationService;
+import com.dormhub.service.ContractService;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -34,6 +38,22 @@ public class ContractLifecycleScheduler {
     private final ContractRepository contractRepository;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final InvoiceRepository invoiceRepository;
+    private final ContractService contractService;
+
+    @Scheduled(cron = "0 */10 * * * *", zone = "Asia/Ho_Chi_Minh")
+    public void expireUnpaidDeposits() {
+        LocalDateTime cutoff = LocalDateTime.now(BUSINESS_ZONE)
+                .minusHours(ContractService.DEPOSIT_RECONCILIATION_GRACE_HOURS);
+        for (Long invoiceId : invoiceRepository.findOverdueDepositIds(
+                InvoiceType.DEPOSIT, InvoiceStatus.UNPAID, ContractStatus.PENDING, cutoff)) {
+            try {
+                contractService.expireUnpaidDeposit(invoiceId);
+            } catch (Exception error) {
+                log.warn("Không thể xử lý hóa đơn cọc quá hạn #{}: {}", invoiceId, error.getMessage());
+            }
+        }
+    }
 
     @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Ho_Chi_Minh")
     @Transactional
