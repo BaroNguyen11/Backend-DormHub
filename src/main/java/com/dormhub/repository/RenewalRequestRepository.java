@@ -11,7 +11,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface RenewalRequestRepository extends JpaRepository<RenewalRequest, Long> {
+public interface RenewalRequestRepository extends JpaRepository<RenewalRequest, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<RenewalRequest> {
 
     boolean existsByContract_ContractIdAndStatus(Long contractId, RenewalStatus status);
 

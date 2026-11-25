@@ -40,10 +40,11 @@ public class ContractController {
     public ResponseEntity<ApiResponse<Page<ContractResponse>>> search(
             @RequestParam(required = false) @Positive Long studentId,
             @RequestParam(required = false) ContractStatus status,
+            @RequestParam(required = false) String search,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.success(
-                contractService.search(studentId, status, pageable)));
+                contractService.search(studentId, status, pageable, search)));
     }
 
     @PatchMapping("/{contractId}/cancel")

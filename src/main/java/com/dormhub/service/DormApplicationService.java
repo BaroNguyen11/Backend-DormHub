@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.DormApplicationRequest;
 import com.dormhub.dto.request.DormApplicationReviewRequest;
 import com.dormhub.dto.response.DormApplicationResponse;
@@ -165,14 +167,14 @@ public class DormApplicationService {
     public Page<DormApplicationResponse> getAll(
             DormApplicationStatus status,
             int page,
-            int size) {
+            int size, String search) {
         validatePage(page, size);
         Pageable pageable = status == DormApplicationStatus.PENDING
                 ? PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "requestDate"))
                 : pageable(page, size);
-        Page<DormApplication> applications = status == null
-                ? dormApplicationRepository.findAll(pageable)
-                : dormApplicationRepository.findAllByStatus(status, pageable);
+        Page<DormApplication> applications = dormApplicationRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<DormApplication>text(search, "id", "student.studentCode", "student.fullName", "student.user.fullName", "requestedRoom.roomNumber", "requestedRoom.building.name", "note", "reviewNote")
+                .and(equal("status", status)), pageable);
         return toResponses(applications);
     }
 

@@ -16,8 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Hóa đơn của sinh viên — chỉ trả về hóa đơn gắn với hợp đồng của chính sinh viên
- * (P0: trước đây SV bị rơi vào /api/v1/invoices của Manager — lỗi IDOR toàn hệ thống).
+ * ROOM_FEE/DEPOSIT thuộc hợp đồng của sinh viên; UTILITY thuộc phòng và kỳ đã cư trú thực tế.
  */
 @RestController
 @RequestMapping("/api/v1/student/invoices")
@@ -32,7 +31,7 @@ public class StudentInvoiceController {
             @Valid InvoiceFilterRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Lấy hóa đơn của bạn thành công",
-                invoiceService.listMyInvoices(user.getId(), request.getMonth(), request.getPage(), request.getSize())));
+                invoiceService.listMyInvoices(user.getId(), request.getMonth(), request.getPage(), request.getSize(), request.getSearch(), request.getStatus())));
     }
 
     @GetMapping("/{invoiceId}")

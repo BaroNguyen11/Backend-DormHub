@@ -34,7 +34,7 @@ public class InvoiceController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<InvoicePageResponse>> list(@Valid InvoiceFilterRequest request) {
-        return ResponseEntity.ok(ApiResponse.success(service.list(request.getMonth(), request.getPage(), request.getSize())));
+        return ResponseEntity.ok(ApiResponse.success(service.list(request.getMonth(), request.getPage(), request.getSize(), request.getSearch(), request.getStatus())));
     }
 
     @GetMapping("/{id}")

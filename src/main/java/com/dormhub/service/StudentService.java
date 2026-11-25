@@ -1,6 +1,8 @@
 
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.StudentProfileUpdateRequest;
 import com.dormhub.dto.response.StudentProfileResponse;
 import com.dormhub.entity.Student;
@@ -120,7 +122,7 @@ public class StudentService {
             int page,
             int size,
             String sortBy,
-            String direction
+            String direction, String search
     ) {
         // 1. Validate pagination
         if (page < 0 || size < 1 || size > 100) {
@@ -156,7 +158,7 @@ public class StudentService {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("user").get("status"), status));
         }
         // 6. Truy vấn và map sang Response
-        Page<Student> students = studentRepository.findAll(spec, pageable);
+        Page<Student> students = studentRepository.findAll(spec.and(text(search, "id", "studentCode", "fullName", "user.fullName", "email", "user.email", "user.username")), pageable);
         return students.map(studentMapper::toResponse);
     }
     public StudentProfileResponse getStudentById(Long studentId) {

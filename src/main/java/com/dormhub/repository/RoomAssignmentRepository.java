@@ -19,6 +19,11 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, Long> {
+    @Query("select distinct a.student.user.id from RoomAssignment a where a.room.id = :roomId "
+            + "and a.checkInAt is not null and a.checkInAt < :end "
+            + "and (a.checkOutAt is null or a.checkOutAt > :start)")
+    List<Long> findResidentUserIdsForPeriod(@Param("roomId") Long roomId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<RoomAssignmentStatus> statuses);
 

@@ -1,6 +1,6 @@
 # Kiểm thử Scheduler độc lập
 
-Profile `scheduler-test` tắt cả 10 cron và billing khi ACCEPTING_TRAFFIC.
+Profile `scheduler-test` tắt cả 11 cron (gồm UTILITY) và billing khi ACCEPTING_TRAFFIC.
 Profile không tự thay datasource, không đổi các hạn nghiệp vụ và không tạo dữ liệu.
 Chỉ bật profile cùng database test riêng đã được xác minh. Không dùng database vận hành.
 
@@ -29,6 +29,7 @@ Không cần sửa source giữa các lần chạy. Có thể truyền `--<prope
 
 | Method | Property cron | Mặc định ngoài profile test |
 |---|---|---|
+| BillingScheduler.generateUtilityInvoices | billing.utility.cron | 0 0 3 * * * |
 | ContractLifecycleScheduler.expireUnpaidDeposits | dormhub.scheduler.contract.unpaid-deposits-cron | 0 */10 * * * * |
 | ContractLifecycleScheduler.expireOverdueContracts | dormhub.scheduler.contract.expire-cron | 0 0 1 * * * |
 | ContractLifecycleScheduler.remindExpiringContracts | dormhub.scheduler.contract.reminder-cron | 0 0 9 * * * |
@@ -41,6 +42,10 @@ Không cần sửa source giữa các lần chạy. Có thể truyền `--<prope
 | TokenCleanupTask.cleanupExpiredTokens | dormhub.scheduler.token.cleanup-cron | 0 0 2 * * ? |
 
 `billing.room-fee.reconcile-on-startup`: mặc định `true`, profile test đặt `false`.
+`billing.utility.reconcile-on-startup`: mặc định `true`, profile test đặt `false`.
+Điện nước được kiểm tra khi ứng dụng ACCEPTING_TRAFFIC lần đầu, đồng thời vẫn giữ
+lịch 03:00 hằng ngày. Để kiểm thử riêng lượt khởi động điện nước, giữ mọi cron `-`
+và truyền `--billing.utility.reconcile-on-startup=true`; công tắc này độc lập với tiền phòng.
 Để kiểm thử riêng event ACCEPTING_TRAFFIC, giữ mọi cron `-` và truyền
 `--billing.room-fee.reconcile-on-startup=true`. Mỗi lần khởi động có thể lập bù nhiều
 tháng; chỉ thực hiện trên database test. Công tắc không ngăn các cron billing đã bật.

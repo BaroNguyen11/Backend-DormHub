@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.MaintenanceCreateRequest;
 import com.dormhub.dto.request.MaintenanceStatusUpdateRequest;
 import com.dormhub.dto.response.MaintenanceResponse;
@@ -162,7 +164,7 @@ public class MaintenanceService {
             MaintenancePriority priority,
             MaintenanceType type,
             int page,
-            int size
+            int size, String search
     ) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -181,7 +183,7 @@ public class MaintenanceService {
             return predicates;
         };
 
-        return maintenanceRepository.findAll(spec, pageable).map(maintenanceMapper::toResponse);
+        return maintenanceRepository.findAll(spec.and(text(search, "id", "title", "description", "student.studentCode", "student.fullName", "student.user.fullName", "room.roomNumber")), pageable).map(maintenanceMapper::toResponse);
     }
 
     // 5. Manager xem chi tiết 1 yêu cầu bảo trì

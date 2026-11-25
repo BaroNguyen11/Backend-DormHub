@@ -19,7 +19,7 @@ import com.dormhub.entity.Room;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.InvoiceMapper;
-import com.dormhub.repository.ContractRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.InvoiceCreationLockRepository;
 import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.MeterReadingRepository;
@@ -33,7 +33,6 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -54,18 +53,18 @@ public class InvoiceService {
     private final RoomMonthlyChargeCalculator calculator;
     private final InvoiceMapper invoiceMapper;
     private final NotificationService notificationService;
-    private final ContractRepository contractRepository;
+    private final RoomAssignmentRepository roomAssignmentRepository;
 
     public InvoiceService(InvoiceRepository invoiceRepository, InvoiceCreationLockRepository invoiceCreationLockRepository,
             MeterReadingRepository meterReadingRepository, RoomMonthlyChargeCalculator calculator,
-            InvoiceMapper invoiceMapper, NotificationService notificationService, ContractRepository contractRepository) {
+            InvoiceMapper invoiceMapper, NotificationService notificationService, RoomAssignmentRepository roomAssignmentRepository) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceCreationLockRepository = invoiceCreationLockRepository;
         this.meterReadingRepository = meterReadingRepository;
         this.calculator = calculator;
         this.invoiceMapper = invoiceMapper;
         this.notificationService = notificationService;
-        this.contractRepository = contractRepository;
+        this.roomAssignmentRepository = roomAssignmentRepository;
     }
 
     @Transactional
@@ -92,19 +91,40 @@ public class InvoiceService {
         if (room == null) {
             throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Room does not exist");
         }
+        return createUtilityInvoice(room, month);
+    }
+
+    @Transactional
+    public boolean createUtilityIfAbsent(Long roomId, YearMonth month) {
+        if (roomId == null || roomId <= 0 || month == null) {
+            throw new AppException(ErrorCode.INVALID_REQUEST);
+        }
+        Room room = invoiceCreationLockRepository.lockRoom(roomId);
+        if (room == null) throw new AppException(ErrorCode.BILLING_NOT_FOUND);
+        if (invoiceRepository.existsByRoom_IdAndBillingMonthAndInvoiceType(roomId, month, InvoiceType.UTILITY)) {
+            return false;
+        }
+        createUtilityInvoice(room, month);
+        return true;
+    }
+
+    private InvoiceResponse createUtilityInvoice(Room room, YearMonth month) {
+        if (!month.isBefore(YearMonth.now(BUSINESS_ZONE))) {
+            throw new AppException(ErrorCode.BILLING_CONFLICT, "Kỳ điện nước chưa kết thúc");
+        }
         MeterReading reading = meterReadingRepository
-                .findByRoom_IdAndReadingMonth(request.getRoomId(), month);
+                .findByRoom_IdAndReadingMonth(room.getId(), month);
         if (reading == null) {
             throw new AppException(ErrorCode.BILLING_NOT_FOUND, "Meter reading does not exist");
         }
         if (reading.getStatus() != ReadingStatus.CONFIRMED) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "Meter reading is not confirmed");
         }
-        if (invoiceRepository.existsByRoom_IdAndBillingMonth(request.getRoomId(), month)) {
+        if (invoiceRepository.existsByRoom_IdAndBillingMonth(room.getId(), month)) {
             throw new AppException(ErrorCode.BILLING_CONFLICT, "UTILITY invoice already exists for this room and month");
         }
 
-        RoomMonthlyChargeResult charge = calculator.calculate(request.getRoomId(), month, reading);
+        RoomMonthlyChargeResult charge = calculator.calculate(room.getId(), month, reading);
 
         InvoiceDetail electricity = newDetail(
                 InvoiceItemType.ELECTRICITY, "Electricity", charge.getElectricityConsumption(),
@@ -117,18 +137,11 @@ public class InvoiceService {
         Invoice invoice = newMonthlyInvoice(InvoiceType.UTILITY, month, total);
         invoice.setRoom(room);
 
-        // Query active contract for this room in the billing month
-        String billingMonthStr = month.toString(); // "2026-11"
-        Optional<Contract> activeContract = contractRepository
-            .findActiveContractByRoomAndMonth(room.getId(), billingMonthStr);
-
-        if (activeContract.isPresent()) {
-            invoice.setContract(activeContract.get());
-        } else {
-            // Hóa đơn UTILITY không có hợp đồng sẽ không thể thanh toán (mất điều kiện
-            // sở hữu của PaymentService) — chặn thay vì tạo hóa đơn "ma"
+        // Shared room invoice: the nullable contract association is intentionally unused.
+        // Ownership and recipients come from actual occupancy, not a representative contract.
+        if (utilityRecipients(invoice).isEmpty()) {
             throw new AppException(ErrorCode.BILLING_CONFLICT,
-                    "Không có hợp đồng ACTIVE cho phòng trong kỳ này — không phát hành hóa đơn tiện ích");
+                    "Không có lịch sử cư trú trong kỳ — không phát hành hóa đơn điện nước");
         }
 
         attachDetail(invoice, electricity);
@@ -198,6 +211,16 @@ public class InvoiceService {
     }
 
     private void notifyInvoiceCreated(Invoice invoice) {
+        if (invoice.getInvoiceType() == InvoiceType.UTILITY) {
+            List<Long> recipients = utilityRecipients(invoice);
+            notificationService.sendNotification(NotificationType.INVOICE_CREATED,
+                    "Hóa đơn điện nước của phòng",
+                    String.format("Hóa đơn điện nước chung phòng %s, kỳ %s đã được phát hành. Hạn thanh toán: %s. Một người thanh toán đủ sẽ hoàn tất hóa đơn của phòng.",
+                            invoice.getRoom().getRoomNumber(), invoice.getBillingMonth(),
+                            invoice.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))),
+                    invoice.getInvoiceId(), recipients);
+            return;
+        }
         if (invoice.getContract() != null
                 && invoice.getContract().getStudent() != null
                 && invoice.getContract().getStudent().getUser() != null) {
@@ -213,6 +236,12 @@ public class InvoiceService {
                     invoice.getContract().getStudent().getUser().getId()
             );
         }
+    }
+
+    private List<Long> utilityRecipients(Invoice invoice) {
+        YearMonth month = invoice.getBillingMonth();
+        return roomAssignmentRepository.findResidentUserIdsForPeriod(invoice.getRoom().getId(),
+                month.atDay(1).atStartOfDay(), month.plusMonths(1).atDay(1).atStartOfDay());
     }
 
     private void validateRoomFeeContract(Contract contract, YearMonth month) {
@@ -262,14 +291,13 @@ public class InvoiceService {
     }
 
     @Transactional(readOnly = true)
-    public InvoicePageResponse list(String month, int page, int size) {
+    public InvoicePageResponse list(String month, int page, int size, String search, InvoiceStatus status) {
         if (page < 0 || size < 1 || size > 100) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "page must be nonnegative and size must be between 1 and 100");
         }
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "invoiceId"));
-        Page<Invoice> invoices = month == null
-                ? invoiceRepository.findAll(pageable)
-                : invoiceRepository.findByBillingMonth(parseMonth(month), pageable);
+        PageRequest pageable = PageRequest.of(page, size);
+        Page<Invoice> invoices = invoiceRepository.findManagerInvoices(month == null ? null : parseMonth(month).atDay(1),
+                com.dormhub.specification.SearchSpecifications.normalize(search), status == null ? "" : status.name(), pageable);
         List<InvoiceSummaryResponse> content = invoices.getContent().stream()
                 .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
                 .toList();
@@ -279,15 +307,14 @@ public class InvoiceService {
     // ===== Hóa đơn của sinh viên (chỉ của chính mình) =====
 
     @Transactional(readOnly = true)
-    public InvoicePageResponse listMyInvoices(Long userId, String month, int page, int size) {
+    public InvoicePageResponse listMyInvoices(Long userId, String month, int page, int size, String search, InvoiceStatus status) {
         if (page < 0 || size < 1 || size > 100) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "page phải >= 0 và size phải từ 1 đến 100");
         }
-        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "invoiceId"));
-        Page<Invoice> invoices = month == null
-                ? invoiceRepository.findAllByContract_Student_User_Id(userId, pageable)
-                : invoiceRepository.findAllByContract_Student_User_IdAndBillingMonth(
-                        userId, parseMonth(month), pageable);
+        PageRequest pageable = PageRequest.of(page, size);
+        Page<Invoice> invoices = invoiceRepository.findAccessibleInvoices(userId,
+                month == null ? null : parseMonth(month).atDay(1),
+                com.dormhub.specification.SearchSpecifications.normalize(search), status == null ? "" : status.name(), pageable);
         List<InvoiceSummaryResponse> content = invoices.getContent().stream()
                 .map(invoice -> invoiceMapper.toSummary(invoice, overdue(invoice)))
                 .toList();
@@ -299,7 +326,7 @@ public class InvoiceService {
         if (invoiceId == null || invoiceId <= 0) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "invoiceId phải là số dương");
         }
-        Invoice invoice = invoiceRepository.findByInvoiceIdAndContract_Student_User_Id(invoiceId, userId)
+        Invoice invoice = invoiceRepository.findAccessibleInvoice(invoiceId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.BILLING_NOT_FOUND, "Không tìm thấy hóa đơn của bạn"));
         return invoiceMapper.toResponse(invoice, overdue(invoice));
     }

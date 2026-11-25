@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.RoomRequest;
 import com.dormhub.dto.response.RoomResponse;
 import com.dormhub.entity.Building;
@@ -50,7 +52,7 @@ public class RoomService {
     private final RoomStatusService roomStatusService;
 
     public Page<RoomResponse> getAllRooms(RoomStatus status, RoomType roomType,
-                                          Long buildingId, Pageable pageable) {
+                                          Long buildingId, Pageable pageable, String search) {
         validatePageable(pageable);
         Specification<Room> specification = (root, query, criteriaBuilder) -> {
             if (query != null && query.getResultType() != Long.class) {
@@ -72,7 +74,7 @@ public class RoomService {
             }
             return predicates;
         };
-        Page<Room> rooms = roomRepository.findAll(specification, pageable);
+        Page<Room> rooms = roomRepository.findAll(specification.and(text(search, "id", "roomNumber", "building.name", "building.buildingCode", "roomType")), pageable);
         Map<Long, Integer> holdsByRoom = getCapacityReservations(rooms.getContent());
         return rooms.map(room -> toResponseWithAvailability(
                 room, holdsByRoom.getOrDefault(room.getId(), 0)));

@@ -19,7 +19,7 @@ import java.util.Optional;
 import java.util.Collection;
 import java.util.List;
 
-public interface ContractRepository extends JpaRepository<Contract, Long> {
+public interface ContractRepository extends JpaRepository<Contract, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Contract> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
 

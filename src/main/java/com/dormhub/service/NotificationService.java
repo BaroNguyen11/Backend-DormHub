@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.response.NotificationResponse;
 import com.dormhub.dto.response.ManagerNotificationSummaryResponse;
 import com.dormhub.dto.response.ManagerNotificationDetailResponse;
@@ -50,9 +52,16 @@ public class NotificationService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
         String normalizedSearch = search == null ? "" : search.trim();
-        return notificationRepository.findManagerHistory(
-                NotificationType.MANAGER_ANNOUNCEMENT, NotificationType.GENERAL,
-                normalizedSearch, normalizedTarget,
+        org.springframework.data.jpa.domain.Specification<com.dormhub.entity.Notification> audience = (root, query, cb) -> cb.or(
+                cb.equal(root.get("type"), NotificationType.MANAGER_ANNOUNCEMENT),
+                cb.and(cb.equal(root.get("type"), NotificationType.GENERAL), cb.isNull(root.get("refId"))));
+        org.springframework.data.jpa.domain.Specification<com.dormhub.entity.Notification> targetFilter = (root, query, cb) -> switch (normalizedTarget) {
+            case "BUILDING" -> cb.and(cb.equal(root.get("type"), NotificationType.MANAGER_ANNOUNCEMENT), cb.isNotNull(root.get("refId")));
+            case "ALL" -> cb.and(cb.equal(root.get("type"), NotificationType.MANAGER_ANNOUNCEMENT), cb.isNull(root.get("refId")));
+            case "LEGACY" -> cb.equal(root.get("type"), NotificationType.GENERAL);
+            default -> cb.conjunction();
+        };
+        return notificationRepository.findAll(audience.and(targetFilter).and(text(normalizedSearch, "id", "title", "body")),
                 PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt", "id")))
                 .map(this::toManagerSummary);
     }

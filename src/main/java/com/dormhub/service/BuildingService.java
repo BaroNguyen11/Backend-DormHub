@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.BuildingRequest;
 import com.dormhub.dto.response.BuildingResponse;
 import com.dormhub.entity.Building;
@@ -34,14 +36,14 @@ public class BuildingService {
     private final ContractRepository contractRepository;
     private final BuildingMapper buildingMapper;
 
-    public List<BuildingResponse> getAllBuildings() {
+    public List<BuildingResponse> getAllBuildings(String search) {
         Map<Long, RoomRepository.BuildingRoomStatsProjection> statsByBuilding = roomRepository
                 .findBuildingRoomStats(RoomStatus.AVAILABLE).stream()
                 .collect(Collectors.toMap(
                         RoomRepository.BuildingRoomStatsProjection::getBuildingId,
                         Function.identity()));
 
-        return buildingRepository.findAll().stream()
+        return buildingRepository.findAll(text(search, "id", "name", "buildingCode", "address", "genderRestriction")).stream()
                 .map(building -> {
                     RoomRepository.BuildingRoomStatsProjection stats = statsByBuilding.get(building.getId());
                     long totalRooms = stats == null ? 0 : stats.getTotalRooms();

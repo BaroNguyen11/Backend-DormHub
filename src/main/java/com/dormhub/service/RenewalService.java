@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.RenewalCreateRequest;
 import com.dormhub.dto.request.RenewalReviewRequest;
 import com.dormhub.dto.response.RenewalResponse;
@@ -132,13 +134,12 @@ public class RenewalService {
 
     @Transactional(readOnly = true)
     public Page<RenewalResponse> getRequestsForManager(
-            RenewalStatus status, int page, int size) {
+            RenewalStatus status, int page, int size, String search) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
-        Page<RenewalRequest> requests = status == null
-                ? renewalRequestRepository.findAll(pageable)
-                : renewalRequestRepository.findAllByStatus(status, pageable);
+        Page<RenewalRequest> requests = renewalRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<RenewalRequest>text(search, "renewalRequestId", "contract.contractId", "contract.student.studentCode", "contract.student.fullName", "contract.student.user.fullName", "contract.room.roomNumber", "reason", "reviewNote").and(equal("status", status)), pageable);
         return requests.map(renewalMapper::toResponse);
     }
 

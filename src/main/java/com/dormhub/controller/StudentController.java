@@ -40,6 +40,7 @@ public class StudentController {
     @GetMapping("/manager/students")
     public ResponseEntity<ApiResponse<Page<StudentProfileResponse>>> searchStudents(
             @RequestParam(required = false) String name,
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) String studentCode,
             @RequestParam(required = false) com.dormhub.entity.enums.UserStatus status,
             @RequestParam(defaultValue = "0") int page,
@@ -48,7 +49,7 @@ public class StudentController {
             @RequestParam(defaultValue = "ASC") String direction
     ) {
         Page<StudentProfileResponse> result = studentService.searchStudent(
-                name, studentCode, status, page, size, sortBy, direction
+                name, studentCode, status, page, size, sortBy, direction, search
         );
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách sinh viên thành công", result));
     }

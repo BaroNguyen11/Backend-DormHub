@@ -17,6 +17,49 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
+    // UTILITY belongs to the room's actual residents in the billed month, including former residents.
+    String STUDENT_ACCESS = """
+        ((i.invoice_type <> 'UTILITY' and exists (
+          select 1 from contracts c join students s on s.id=c.student_id
+          where c.contract_id=i.contract_id and s.user_id=:userId))
+        or (i.invoice_type='UTILITY' and exists (
+          select 1 from room_assignments a join students s on s.id=a.student_id
+          where a.room_id=i.room_id and s.user_id=:userId
+          and a.check_in_at is not null
+          and a.check_in_at < i.billing_month + interval '1 month'
+          and (a.check_out_at is null or a.check_out_at > i.billing_month))))
+        """;
+
+    String SEARCH_FROM = " from invoices i left join contracts c on c.contract_id=i.contract_id "
+            + "left join students s on s.id=c.student_id left join users u on u.id=s.user_id "
+            + "left join rooms r on r.id=coalesce(i.room_id,c.room_id) left join buildings b on b.id=r.building_id ";
+    String SEARCH_TEXT = "translate(lower(concat_ws(' ',i.invoice_id,i.invoice_type,i.billing_month,i.total_amount,"
+            + "r.room_number,b.name,s.student_code,s.full_name,u.full_name,"
+            + "case i.invoice_type when 'UTILITY' then 'Hóa đơn chung của phòng điện nước' when 'ROOM_FEE' then 'Tiền thuê phòng' else 'Tiền cọc' end)), '"
+            + com.dormhub.specification.SearchSpecifications.ACCENTS + "', '"
+            + com.dormhub.specification.SearchSpecifications.ASCII + "')";
+    String SEARCH_FILTER = " and (cast(:month as date) is null or i.billing_month=cast(:month as date)) "
+            + "and (:status='' or i.status=:status) and (:search='' or not exists "
+            + "(select 1 from unnest(string_to_array(:search,' ')) as terms(term) where "
+            + SEARCH_TEXT + " not like '%' || replace(replace(replace(term,'!','!!'),'%','!%'),'_','!_') || '%' escape '!')) ";
+
+    @Query(value = "select i.*" + SEARCH_FROM + " where " + STUDENT_ACCESS
+            + SEARCH_FILTER + " order by i.invoice_id desc",
+            countQuery = "select count(*)" + SEARCH_FROM + " where " + STUDENT_ACCESS + SEARCH_FILTER, nativeQuery = true)
+    Page<Invoice> findAccessibleInvoices(@Param("userId") Long userId,
+            @Param("month") java.time.LocalDate month, @Param("search") String search,
+            @Param("status") String status, Pageable pageable);
+
+    @Query(value = "select i.*" + SEARCH_FROM + " where true " + SEARCH_FILTER + " order by i.invoice_id desc",
+            countQuery = "select count(*)" + SEARCH_FROM + " where true " + SEARCH_FILTER, nativeQuery = true)
+    Page<Invoice> findManagerInvoices(@Param("month") java.time.LocalDate month,
+            @Param("search") String search, @Param("status") String status, Pageable pageable);
+
+    @Query(value = "select i.* from invoices i where i.invoice_id=:invoiceId and " + STUDENT_ACCESS,
+            nativeQuery = true)
+    Optional<Invoice> findAccessibleInvoice(@Param("invoiceId") Long invoiceId, @Param("userId") Long userId);
+
+    boolean existsByRoom_IdAndBillingMonthAndInvoiceType(Long roomId, YearMonth month, InvoiceType type);
 
     @Override
     @EntityGraph(attributePaths = {"room", "room.building", "contract", "contract.room", "contract.room.building", "contract.student", "contract.student.user"})

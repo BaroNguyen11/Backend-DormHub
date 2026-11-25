@@ -14,6 +14,10 @@ public class RenewalResponse {
     private final Long renewalRequestId;
     private final Long contractId;
     private final Long studentId;
+    private final String studentName;
+    private final String studentCode;
+    private final String roomNumber;
+    private final String buildingName;
     private final LocalDateTime requestedEndDate;
     private final LocalDateTime contractEndDate;
     private final String reason;

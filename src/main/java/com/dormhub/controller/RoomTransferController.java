@@ -70,9 +70,10 @@ public class RoomTransferController {
     public ResponseEntity<ApiResponse<Page<RoomTransferResponse>>> getRequestsForManager(
             @RequestParam(required = false) TransferStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu chuyển phòng thành công",
-                roomTransferService.getRequestsForManager(status, page, size)));
+                roomTransferService.getRequestsForManager(status, page, size, search)));
     }
 
     @GetMapping("/manager/room-transfer-requests/{transferId}")

@@ -7,6 +7,10 @@ import lombok.Data;
 
 @Data
 public class InvoiceFilterRequest {
+    @jakarta.validation.constraints.Size(max = 200)
+    private String search;
+
+    private com.dormhub.entity.enums.InvoiceStatus status;
 
     @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])")
     private String month;

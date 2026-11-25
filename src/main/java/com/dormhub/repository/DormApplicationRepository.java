@@ -15,7 +15,7 @@ import java.util.Collection;
 import java.util.Optional;
 import java.util.List;
 
-public interface DormApplicationRepository extends JpaRepository<DormApplication, Long> {
+public interface DormApplicationRepository extends JpaRepository<DormApplication, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<DormApplication> {
 
     @EntityGraph(attributePaths = {"student.user", "requestedRoom.building"})
     Page<DormApplication> findAllByStudentId(Long studentId, Pageable pageable);

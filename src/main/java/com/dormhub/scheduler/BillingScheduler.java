@@ -22,6 +22,7 @@ public class BillingScheduler {
     private static final Logger log = LoggerFactory.getLogger(BillingScheduler.class);
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final long BILLING_LOCK_KEY = 824001L;
+    private static final long UTILITY_LOCK_KEY = 824002L;
 
     private final BillingBatchService billingBatchService;
     private final TaskScheduler taskScheduler;
@@ -29,6 +30,9 @@ public class BillingScheduler {
     private final AtomicBoolean applicationReady = new AtomicBoolean();
     @Value("${billing.room-fee.reconcile-on-startup:true}")
     private boolean reconcileOnStartup;
+    @Value("${billing.utility.reconcile-on-startup:true}")
+    private boolean utilityReconcileOnStartup;
+    private final AtomicBoolean utilityStartupScheduled = new AtomicBoolean();
 
     public BillingScheduler(BillingBatchService billingBatchService,
                             TaskScheduler taskScheduler,
@@ -47,6 +51,12 @@ public class BillingScheduler {
             } else {
                 log.info("Scheduler BillingScheduler.reconcileCurrentMonth disabled on startup");
             }
+            if (utilityReconcileOnStartup && utilityStartupScheduled.compareAndSet(false, true)) {
+                log.info("Scheduler BillingScheduler.generateUtilityInvoices scheduled on startup");
+                taskScheduler.schedule(this::generateUtilityInvoices, Instant.now());
+            } else if (!utilityReconcileOnStartup) {
+                log.info("Scheduler BillingScheduler.generateUtilityInvoices disabled on startup");
+            }
         }
     }
 
@@ -61,6 +71,22 @@ public class BillingScheduler {
     public void reconcileDailyRoomFees() {
         if (applicationReady.get()) {
             runCurrentMonth("reconcileDailyRoomFees");
+        }
+    }
+
+    @Scheduled(cron = "${billing.utility.cron:0 0 3 * * *}", zone = "Asia/Ho_Chi_Minh")
+    public void generateUtilityInvoices() {
+        if (!applicationReady.get()) return;
+        log.info("Scheduler BillingScheduler.generateUtilityInvoices START at={}", Instant.now());
+        try {
+            if (!distributedLockRepository.runWithLock(UTILITY_LOCK_KEY, billingBatchService::generateUtilityInvoices)) {
+                log.info("UTILITY billing skipped: another instance holds the lock");
+            }
+        } catch (Exception error) {
+            log.error("UTILITY scheduler failed: errorType={}", error.getClass().getSimpleName());
+            throw error;
+        } finally {
+            log.info("Scheduler BillingScheduler.generateUtilityInvoices END at={}", Instant.now());
         }
     }
 

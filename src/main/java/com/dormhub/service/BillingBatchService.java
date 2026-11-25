@@ -2,6 +2,7 @@ package com.dormhub.service;
 
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.repository.RoomFeeBillingContractRepository;
+import com.dormhub.repository.MeterReadingRepository;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -19,10 +20,37 @@ public class BillingBatchService {
 
     private final RoomFeeBillingContractRepository contractRepository;
     private final InvoiceService invoiceService;
+    private final MeterReadingRepository meterReadingRepository;
 
-    public BillingBatchService(RoomFeeBillingContractRepository contractRepository, InvoiceService invoiceService) {
+    public BillingBatchService(RoomFeeBillingContractRepository contractRepository, InvoiceService invoiceService,
+            MeterReadingRepository meterReadingRepository) {
         this.contractRepository = contractRepository;
         this.invoiceService = invoiceService;
+        this.meterReadingRepository = meterReadingRepository;
+    }
+
+    public void generateUtilityInvoices() {
+        long created = 0, skipped = 0, failed = 0, afterId = 0;
+        try {
+            while (true) {
+                var readings = meterReadingRepository.findUnbilledConfirmedAfter(afterId,
+                        YearMonth.now(BUSINESS_ZONE), PageRequest.of(0, PAGE_SIZE));
+                if (readings.isEmpty()) break;
+                for (var reading : readings) {
+                    afterId = reading.getReadingId();
+                    try {
+                        if (invoiceService.createUtilityIfAbsent(reading.getRoom().getId(), reading.getReadingMonth())) created++;
+                        else skipped++;
+                    } catch (Exception error) {
+                        failed++;
+                        log.error("UTILITY billing failed: readingId={}, roomId={}, month={}, errorType={}",
+                                reading.getReadingId(), reading.getRoom().getId(), reading.getReadingMonth(), error.getClass().getSimpleName());
+                    }
+                }
+            }
+        } finally {
+            log.info("UTILITY billing complete: created={}, skipped={}, failed={}", created, skipped, failed);
+        }
     }
 
     public YearMonth earliestActiveMonth() {

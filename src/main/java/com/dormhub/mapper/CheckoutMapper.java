@@ -12,11 +12,18 @@ public class CheckoutMapper {
             return null;
         }
 
+        var student = request.getStudent();
+        var room = request.getContract().getRoom();
         return CheckoutResponse.builder()
                 .checkoutRequestId(request.getCheckoutRequestId())
                 .studentId(request.getStudent().getId())
                 .contractId(request.getContract().getContractId())
                 .roomId(request.getContract().getRoom().getId())
+                .studentName(student.getUser() != null && student.getUser().getFullName() != null
+                        ? student.getUser().getFullName() : student.getFullName())
+                .studentCode(student.getStudentCode())
+                .roomNumber(room == null ? null : room.getRoomNumber())
+                .buildingName(room == null || room.getBuilding() == null ? null : room.getBuilding().getName())
                 .requestDate(request.getRequestDate())
                 .checkoutDate(request.getCheckoutDate())
                 .status(request.getStatus())

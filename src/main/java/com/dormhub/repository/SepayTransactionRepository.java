@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface SepayTransactionRepository extends JpaRepository<SepayTransaction, Long> {
+public interface SepayTransactionRepository extends JpaRepository<SepayTransaction, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<SepayTransaction> {
 
     boolean existsByCodeAndStatusIn(String code, Collection<SepayTransactionStatus> statuses);
 

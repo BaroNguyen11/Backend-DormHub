@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface CheckoutRequestRepository extends JpaRepository<CheckoutRequest, Long> {
+public interface CheckoutRequestRepository extends JpaRepository<CheckoutRequest, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<CheckoutRequest> {
 
     boolean existsByContract_ContractIdAndStatusIn(
             Long contractId, Collection<CheckoutRequestStatus> statuses);

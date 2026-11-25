@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.response.ContractResponse;
 import com.dormhub.dto.response.CheckInPlanResponse;
 import com.dormhub.entity.Contract;
@@ -300,17 +302,11 @@ public class ContractService {
                         contract.getMonthlyRent(), selected), confirmed);
     }
 
-    public Page<ContractResponse> search(Long studentId, ContractStatus status, Pageable pageable) {
-        Page<Contract> contracts;
-        if (studentId != null && status != null) {
-            contracts = contractRepository.findAllByStudent_IdAndStatus(studentId, status, pageable);
-        } else if (studentId != null) {
-            contracts = contractRepository.findAllByStudent_Id(studentId, pageable);
-        } else if (status != null) {
-            contracts = contractRepository.findAllByStatus(status, pageable);
-        } else {
-            contracts = contractRepository.findAll(pageable);
-        }
+    public Page<ContractResponse> search(Long studentId, ContractStatus status, Pageable pageable, String search) {
+        var spec = com.dormhub.specification.SearchSpecifications.<Contract>text(search,
+                "contractId", "student.studentCode", "student.fullName", "student.user.fullName", "room.roomNumber", "room.building.name")
+                .and(equal("student.id", studentId)).and(equal("status", status));
+        Page<Contract> contracts = contractRepository.findAll(spec, pageable);
         return contracts.map(contractMapper::toResponse);
     }
 

@@ -20,8 +20,8 @@ public class BuildingController {
     private final BuildingService buildingService;
     
     @GetMapping
-    public ResponseEntity<ApiResponse<List<BuildingResponse>>> getAllBuildings() {
-        List<BuildingResponse> buildings = buildingService.getAllBuildings();
+    public ResponseEntity<ApiResponse<List<BuildingResponse>>> getAllBuildings(@RequestParam(required = false) String search) {
+        List<BuildingResponse> buildings = buildingService.getAllBuildings(search);
         return ResponseEntity.ok(ApiResponse.success("Get buildings successfully", buildings));
     }
     
