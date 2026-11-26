@@ -32,6 +32,24 @@ public class RoomTransferController {
 
     private final RoomTransferService roomTransferService;
 
+    @PostMapping("/manager/room-transfer-requests/{transferId}/complete")
+    public ResponseEntity<ApiResponse<RoomTransferResponse>> complete(
+            @PathVariable @Positive Long transferId,
+            @Valid @RequestBody com.dormhub.dto.request.RoomTransferCompleteRequest request,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.success("Xác nhận chuyển phòng thành công",
+                roomTransferService.complete(transferId, request, user.getId())));
+    }
+
+    @PatchMapping("/manager/room-transfer-requests/{transferId}/cancel")
+    public ResponseEntity<ApiResponse<RoomTransferResponse>> cancelApproved(
+            @PathVariable @Positive Long transferId,
+            @Valid @RequestBody com.dormhub.dto.request.RoomTransferCancelRequest request,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(ApiResponse.success("Hủy yêu cầu chuyển phòng thành công",
+                roomTransferService.cancelApproved(transferId, request, user.getId())));
+    }
+
     @PostMapping("/student/room-transfer-requests")
     public ResponseEntity<ApiResponse<RoomTransferResponse>> create(
             @Valid @RequestBody RoomTransferCreateRequest request,
@@ -45,9 +63,10 @@ public class RoomTransferController {
     public ResponseEntity<ApiResponse<Page<RoomTransferResponse>>> getMyRequests(
             @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) TransferStatus status) {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu chuyển phòng thành công",
-                roomTransferService.getMyRequests(user.getId(), page, size)));
+                roomTransferService.getMyRequests(user.getId(), page, size, status)));
     }
 
     @GetMapping("/student/room-transfer-requests/{transferId}")

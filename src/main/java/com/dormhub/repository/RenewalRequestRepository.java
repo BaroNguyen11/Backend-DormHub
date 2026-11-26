@@ -12,6 +12,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RenewalRequestRepository extends JpaRepository<RenewalRequest, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<RenewalRequest> {
+    @Query("select count(r) > 0 from RenewalRequest r where r.contract.student.id = :studentId "
+            + "and r.status = 'PENDING' and r.renewalRequestId <> :excludedId")
+    boolean hasOpenRequest(@Param("studentId") Long studentId, @Param("excludedId") Long excludedId);
 
     boolean existsByContract_ContractIdAndStatus(Long contractId, RenewalStatus status);
 

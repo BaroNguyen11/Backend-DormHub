@@ -9,4 +9,7 @@ import lombok.Setter;
 public class CheckoutCompleteRequest {
 
     private DepositStatus depositDisposition;
+
+    @jakarta.validation.constraints.Size(max = 1000)
+    private String note;
 }

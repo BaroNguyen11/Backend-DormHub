@@ -50,8 +50,6 @@ public class DormApplicationService {
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    private static final List<DormApplicationStatus> ACTIVE_STATUSES =
-            List.of(DormApplicationStatus.PENDING, DormApplicationStatus.APPROVED);
 
     private final DormApplicationRepository dormApplicationRepository;
     private final ContractRepository contractRepository;
@@ -62,6 +60,9 @@ public class DormApplicationService {
     private final ContractService contractService;
     private final NotificationService notificationService;
     private final DormApplicationMapper dormApplicationMapper;
+    private final RoomStatusService roomStatusService;
+    private final com.dormhub.repository.RoomAssignmentRepository roomAssignmentRepository;
+    private final com.dormhub.repository.CheckoutRequestRepository checkoutRequestRepository;
 
     @Transactional
     public DormApplicationResponse submit(Long userId, DormApplicationRequest request) {
@@ -75,7 +76,17 @@ public class DormApplicationService {
         if (request.getRoomId() == null) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ROOM_REQUIRED);
         }
-        if (dormApplicationRepository.existsByStudentIdAndStatusIn(student.getId(), ACTIVE_STATUSES)) {
+        // Student row lock serializes submissions; inspect every live contract/stay,
+        // not the latest application or the historical APPROVED status alone.
+        if (dormApplicationRepository.existsByStudentIdAndStatusIn(student.getId(),
+                    List.of(DormApplicationStatus.PENDING))
+                || contractRepository.existsByStudent_IdAndStatusIn(student.getId(),
+                    List.of(ContractStatus.PENDING, ContractStatus.ACTIVE))
+                || roomAssignmentRepository.existsByStudent_IdAndStatusIn(student.getId(),
+                    List.of(com.dormhub.entity.enums.RoomAssignmentStatus.ASSIGNED,
+                            com.dormhub.entity.enums.RoomAssignmentStatus.CHECKED_IN))
+                || checkoutRequestRepository.hasOpenRequest(student.getId(), -1L)
+                || dormApplicationRepository.hasUnresolvedApprovedApplication(student.getId())) {
             throw new AppException(ErrorCode.DORM_APPLICATION_ALREADY_ACTIVE);
         }
         Room selectedRoom = findAvailableRoom(request.getRoomId(), student);
@@ -304,7 +315,8 @@ public class DormApplicationService {
                 room.getId(), List.of(DormApplicationStatus.PENDING));
         long pendingContracts = contractRepository.countByRoom_IdAndStatusIn(
                 room.getId(), List.of(ContractStatus.PENDING));
-        if (room.getCurrentOccupancy() + pendingContracts + pendingApplications >= room.getCapacity()) {
+        if (room.getCurrentOccupancy() + pendingContracts + pendingApplications
+                + roomStatusService.transferHolds(room.getId()) >= room.getCapacity()) {
             throw new AppException(ErrorCode.ROOM_FULL);
         }
         if (room.getStatus() != RoomStatus.AVAILABLE) {

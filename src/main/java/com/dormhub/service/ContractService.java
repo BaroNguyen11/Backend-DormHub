@@ -132,7 +132,8 @@ public class ContractService {
             throw new AppException(ErrorCode.ROOM_NOT_AVAILABLE);
         }
         long alreadyHeld = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), ROOM_HOLD_STATUSES);
+                room.getId(), ROOM_HOLD_STATUSES) + roomStatusService.transferHolds(room.getId())
+                + roomStatusService.pendingApplicationHolds(room.getId());
         if (room.getCurrentOccupancy() + alreadyHeld >= room.getCapacity()) {
             throw new AppException(ErrorCode.ROOM_FULL);
         }

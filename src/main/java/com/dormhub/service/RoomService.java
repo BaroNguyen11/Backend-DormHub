@@ -243,6 +243,7 @@ public class RoomService {
         dormApplicationRepository.findRoomApplicationHoldCounts(
                         roomIds, com.dormhub.entity.enums.DormApplicationStatus.PENDING)
                 .forEach(hold -> reservations.merge(hold.getRoomId(), Math.toIntExact(hold.getHoldCount()), Integer::sum));
+        roomStatusService.transferHolds(roomIds).forEach((roomId, count) -> reservations.merge(roomId, count, Integer::sum));
         return reservations;
     }
 
@@ -263,7 +264,7 @@ public class RoomService {
                 contractRepository.countByRoom_IdAndStatusIn(roomId, CAPACITY_HOLD_STATUSES));
         int pendingApplications = Math.toIntExact(dormApplicationRepository.countByRequestedRoomIdAndStatusIn(
                 roomId, List.of(com.dormhub.entity.enums.DormApplicationStatus.PENDING)));
-        return pendingContracts + pendingApplications;
+        return pendingContracts + pendingApplications + Math.toIntExact(roomStatusService.transferHolds(roomId));
     }
 
     private void validateFloor(Integer floor, Building building) {

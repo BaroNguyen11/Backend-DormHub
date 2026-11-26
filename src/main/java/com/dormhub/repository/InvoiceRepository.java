@@ -32,7 +32,17 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     String SEARCH_FROM = " from invoices i left join contracts c on c.contract_id=i.contract_id "
             + "left join students s on s.id=c.student_id left join users u on u.id=s.user_id "
-            + "left join rooms r on r.id=coalesce(i.room_id,c.room_id) left join buildings b on b.id=r.building_id ";
+            + "left join dorm_applications da on da.id=c.dorm_application_id "
+            + "left join lateral (select a.room_id from room_assignments a where a.contract_id=c.contract_id "
+            + "and (i.invoice_type='DEPOSIT' or (coalesce(a.check_in_at,a.assigned_at)<i.billing_month+interval '1 month' "
+            + "and (a.check_out_at is null or a.check_out_at>i.billing_month))) order by a.assignment_id limit 1) history on true "
+            + "left join rooms r on r.id=coalesce(i.room_id,case when i.invoice_type='DEPOSIT' then da.requested_room_id end,"
+            + "history.room_id,case when c.status='PENDING' and i.invoice_type='DEPOSIT' then c.room_id end) "
+            + "left join buildings b on b.id=r.building_id ";
+    // Identical ownership/period rule to invoice viewing and payment, including former rooms.
+    @Query(value = "select exists(select 1 from invoices i where i.status='UNPAID' "
+            + "and i.invoice_type in ('ROOM_FEE','UTILITY') and " + STUDENT_ACCESS + ")", nativeQuery = true)
+    boolean hasUnpaidResidenceObligation(@Param("userId") Long userId);
     String SEARCH_TEXT = "translate(lower(concat_ws(' ',i.invoice_id,i.invoice_type,i.billing_month,i.total_amount,"
             + "r.room_number,b.name,s.student_code,s.full_name,u.full_name,"
             + "case i.invoice_type when 'UTILITY' then 'Hóa đơn chung của phòng điện nước' when 'ROOM_FEE' then 'Tiền thuê phòng' else 'Tiền cọc' end)), '"

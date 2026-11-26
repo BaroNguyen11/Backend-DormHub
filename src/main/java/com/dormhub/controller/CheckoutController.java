@@ -46,9 +46,10 @@ public class CheckoutController {
     public ResponseEntity<ApiResponse<Page<CheckoutResponse>>> getMyRequests(
             @AuthenticationPrincipal User user,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) CheckoutRequestStatus status) {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu trả phòng thành công",
-                checkoutService.getMyRequests(user.getId(), page, size)));
+                checkoutService.getMyRequests(user.getId(), page, size, status)));
     }
 
     @GetMapping("/student/checkout-requests/{checkoutRequestId}")
@@ -96,9 +97,10 @@ public class CheckoutController {
     @PatchMapping("/manager/checkout-requests/{checkoutRequestId}/cancel")
     public ResponseEntity<ApiResponse<CheckoutResponse>> cancelForManager(
             @PathVariable @Positive Long checkoutRequestId,
-            @Valid @RequestBody CheckoutReviewRequest request) {
+            @Valid @RequestBody CheckoutReviewRequest request,
+            @AuthenticationPrincipal User user) {
         return ResponseEntity.ok(ApiResponse.success("Hủy yêu cầu trả phòng thành công",
-                checkoutService.cancelForManager(checkoutRequestId, request)));
+                checkoutService.cancelForManager(checkoutRequestId, request, user.getId())));
     }
 
     @PostMapping("/manager/checkout-requests/{checkoutRequestId}/complete")

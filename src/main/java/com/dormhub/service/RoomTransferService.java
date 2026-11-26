@@ -44,6 +44,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class RoomTransferService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
+    private final RoomAssignmentService residenceService;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final List<RoomAssignmentStatus> OCCUPYING_ASSIGNMENT_STATUSES =
             List.of(RoomAssignmentStatus.ASSIGNED, RoomAssignmentStatus.CHECKED_IN);
@@ -68,7 +71,8 @@ public class RoomTransferService {
                                InvoiceRepository invoiceRepository,
                                RoomTransferMapper roomTransferMapper,
                                NotificationService notificationService,
-                               RoomStatusService roomStatusService) {
+                               RoomStatusService roomStatusService, RoomAssignmentService residenceService) {
+        this.residenceService = residenceService;
         this.transferRequestRepository = transferRequestRepository;
         this.contractRepository = contractRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
@@ -87,27 +91,23 @@ public class RoomTransferService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        Student student = getStudentByUserId(userId);
-        // Khóa biên phân phòng hiện tại (PESSIMISTIC_WRITE): hai request tạo
-        // chuyển phòng đồng thời sẽ tuần tự hóa trên dòng này, nên lần kiểm
-        // tra "đã có request PENDING" bên dưới không thể bị hai luồng vượt qua
-        // cùng lúc (chặn tạo trùng yêu cầu chuyển phòng).
-        RoomAssignment currentAssignment = getCurrentAssignmentForStudentForUpdate(student.getId());
-        ensureStudentIsCheckedIn(student, currentAssignment);
-
-        if (transferRequestRepository.existsByStudent_IdAndStatus(
-                student.getId(), TransferStatus.PENDING)) {
-            throw new AppException(ErrorCode.TRANSFER_ALREADY_PENDING);
-        }
+        RoomAssignment currentAssignment = residenceService.lockResidenceChange(userId, false);
+        Student student = currentAssignment.getStudent();
+        residenceService.ensureNoOpenResidenceChange(student.getId(), null, null, null);
 
         Room preferredRoom = null;
         if (request.getPreferredRoomId() != null) {
             if (Objects.equals(request.getPreferredRoomId(), currentAssignment.getRoom().getId())) {
                 throw new AppException(ErrorCode.TRANSFER_SAME_ROOM);
             }
-            preferredRoom = roomRepository.findById(request.getPreferredRoomId())
+            preferredRoom = roomRepository.findByIdForUpdate(request.getPreferredRoomId())
                     .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+            entityManager.refresh(preferredRoom);
         }
+
+        if (preferredRoom == null) throw new AppException(ErrorCode.TRANSFER_ROOM_REQUIRED);
+        validateDestinationRoom(student, preferredRoom, 0);
+        ensureSamePrice(currentAssignment.getContract(), preferredRoom);
 
         RoomTransferRequest transferRequest = new RoomTransferRequest();
         transferRequest.setStudent(student);
@@ -117,17 +117,21 @@ public class RoomTransferService {
         transferRequest.setStatus(TransferStatus.PENDING);
         transferRequest.setRequestedAt(LocalDateTime.now(BUSINESS_ZONE));
 
-        return roomTransferMapper.toResponse(transferRequestRepository.save(transferRequest));
+        RoomTransferRequest saved = transferRequestRepository.save(transferRequest);
+        notificationService.notifyResidenceRequestManagers("Yêu cầu chuyển phòng mới",
+                "Sinh viên " + student.getStudentCode() + " gửi yêu cầu chuyển phòng #" + saved.getTransferId() + ".");
+        return roomTransferMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<RoomTransferResponse> getMyRequests(Long userId, int page, int size) {
+    public Page<RoomTransferResponse> getMyRequests(Long userId, int page, int size, TransferStatus status) {
         validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
-        return transferRequestRepository.findAllByStudent_Id(student.getId(), pageable)
-                .map(roomTransferMapper::toResponse);
+        return transferRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<RoomTransferRequest>equal("student.id", student.getId())
+                        .and(equal("status", status)), pageable).map(roomTransferMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -178,12 +182,16 @@ public class RoomTransferService {
                     "Kết quả xử lý chỉ được là APPROVED hoặc REJECTED");
         }
 
+        if (request.getStatus() == TransferStatus.REJECTED
+                && (request.getReviewNote() == null || request.getReviewNote().isBlank()))
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần ghi rõ lý do từ chối chuyển phòng.");
         RoomTransferRequest transferRequest = getTransferRequestForUpdate(transferId);
         ensurePending(transferRequest);
         User reviewer = userRepository.findById(reviewerUserId)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (request.getStatus() == TransferStatus.APPROVED) {
+            roomStatusService.ensureTransferHandoverReady();
             approveTransfer(transferRequest, request, reviewer);
         }
 
@@ -191,9 +199,99 @@ public class RoomTransferService {
         transferRequest.setReviewedBy(reviewer);
         transferRequest.setReviewedAt(LocalDateTime.now(BUSINESS_ZONE));
         transferRequest.setReviewNote(trimToNull(request.getReviewNote()));
-        RoomTransferRequest savedRequest = transferRequestRepository.save(transferRequest);
+        RoomTransferRequest savedRequest = transferRequestRepository.saveAndFlush(transferRequest);
+        if (savedRequest.getStatus() == TransferStatus.APPROVED)
+            roomStatusService.refreshStatus(savedRequest.getApprovedRoom().getId());
         notifyStudent(savedRequest);
         return roomTransferMapper.toResponse(savedRequest);
+    }
+
+    @Transactional
+    public RoomTransferResponse complete(Long transferId,
+            com.dormhub.dto.request.RoomTransferCompleteRequest request, Long reviewerUserId) {
+        roomStatusService.ensureTransferHandoverReady();
+        RoomTransferRequest transfer = getTransferRequestForUpdate(transferId);
+        if (transfer.getStatus() == TransferStatus.COMPLETED) return roomTransferMapper.toResponse(transfer);
+        if (transfer.getStatus() != TransferStatus.APPROVED || transfer.getApprovedRoom() == null
+                || transfer.getReviewedAt() == null) throw new AppException(ErrorCode.TRANSFER_INVALID_STATUS);
+        if (request == null) throw new AppException(ErrorCode.INVALID_REQUEST);
+        boolean overdue = LocalDateTime.now(BUSINESS_ZONE).isAfter(transfer.getReviewedAt().plusHours(72));
+        if (overdue && (!Boolean.TRUE.equals(request.getLateCompletionConfirmed())
+                || request.getNote() == null || request.getNote().isBlank())) {
+            throw new AppException(ErrorCode.TRANSFER_INVALID_STATUS,
+                    "Đã quá hạn 72 giờ. Cần xác minh bàn giao thực tế, xác nhận ngoại lệ và ghi rõ lý do.");
+        }
+        User reviewer = userRepository.findById(reviewerUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        RoomAssignment current = lockTransferStay(transfer, true);
+        residenceService.ensureNoOpenResidenceChange(transfer.getStudent().getId(), null, transferId, null);
+        residenceService.lockResidenceInvoiceRooms(transfer.getStudent().getId(), current.getRoom().getId(), transfer.getApprovedRoom().getId());
+        Room destination = roomRepository.findByIdForUpdate(transfer.getApprovedRoom().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+        entityManager.refresh(destination);
+        if (Objects.equals(destination.getId(), current.getRoom().getId()))
+            throw new AppException(ErrorCode.TRANSFER_SAME_ROOM);
+        if (roomStatusService.transferHolds(destination.getId()) < 1)
+            throw new AppException(ErrorCode.TRANSFER_ROOM_NOT_AVAILABLE, "Không tìm thấy suất giữ phù hợp cho yêu cầu.");
+        validateDestinationRoom(transfer.getStudent(), destination, 1);
+        ensureSamePrice(current.getContract(), destination);
+        residenceService.ensureNoUnpaidResidenceInvoices(current.getContract());
+        appendActionNote(transfer, reviewer, overdue ? "Hoàn tất ngoại lệ quá hạn" : "Hoàn tất bàn giao", request.getNote());
+        moveAfterHandover(transfer, current, destination, reviewer);
+        transfer.setStatus(TransferStatus.COMPLETED);
+        transferRequestRepository.saveAndFlush(transfer);
+        roomStatusService.syncOccupancyAndRefreshStatus(current.getRoom().getId());
+        roomStatusService.syncOccupancyAndRefreshStatus(destination.getId());
+        notifyStudent(transfer);
+        return roomTransferMapper.toResponse(transfer);
+    }
+
+    @Transactional
+    public RoomTransferResponse cancelApproved(Long transferId,
+            com.dormhub.dto.request.RoomTransferCancelRequest request, Long reviewerUserId) {
+        roomStatusService.ensureTransferHandoverReady();
+        if (request == null || !Boolean.TRUE.equals(request.getStudentHasNotMoved())
+                || request.getNote() == null || request.getNote().isBlank())
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần xác nhận chưa chuyển phòng thực tế và nhập lý do hủy.");
+        RoomTransferRequest transfer = getTransferRequestForUpdate(transferId);
+        if (transfer.getStatus() != TransferStatus.APPROVED || transfer.getApprovedRoom() == null)
+            throw new AppException(ErrorCode.TRANSFER_INVALID_STATUS);
+        User reviewer = userRepository.findById(reviewerUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
+        RoomAssignment current = lockTransferStay(transfer, false);
+        residenceService.lockResidenceInvoiceRooms(transfer.getStudent().getId(), current.getRoom().getId(), transfer.getApprovedRoom().getId());
+        appendActionNote(transfer, reviewer, "Hủy sau xác minh chưa bàn giao", request.getNote());
+        transfer.setStatus(TransferStatus.CANCELLED);
+        transferRequestRepository.saveAndFlush(transfer);
+        roomStatusService.refreshStatus(transfer.getApprovedRoom().getId());
+        notifyStudent(transfer);
+        return roomTransferMapper.toResponse(transfer);
+    }
+
+    private RoomAssignment lockTransferStay(RoomTransferRequest transfer, boolean requireActive) {
+        Contract contract = contractRepository.findByContractIdForUpdate(transfer.getCurrentAssignment().getContract().getContractId())
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        Student student = studentRepository.findByUserIdForUpdate(transfer.getStudent().getUser().getId())
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        RoomAssignment current = roomAssignmentRepository.findByAssignmentIdForUpdate(transfer.getCurrentAssignment().getAssignmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
+        entityManager.refresh(contract);
+        entityManager.refresh(current);
+        if (current.getStatus() != RoomAssignmentStatus.CHECKED_IN
+                || !Objects.equals(current.getStudent().getId(), student.getId())
+                || !Objects.equals(contract.getStudent().getId(), student.getId())
+                || !Objects.equals(contract.getRoom().getId(), current.getRoom().getId()))
+            throw new AppException(ErrorCode.TRANSFER_INVALID_STATUS, "Thông tin cư trú đã thay đổi. Cần kiểm tra lại bàn giao.");
+        if (requireActive) ensureStudentIsCheckedIn(student, current);
+        return current;
+    }
+
+    private void appendActionNote(RoomTransferRequest transfer, User reviewer, String action, String note) {
+        String entry = action + " — Manager #" + reviewer.getId() + " — " + LocalDateTime.now(BUSINESS_ZONE)
+                + (note == null || note.isBlank() ? "" : ": " + note.trim());
+        String combined = (transfer.getReviewNote() == null ? "" : transfer.getReviewNote() + "\n") + entry;
+        if (combined.length() > 1000) throw new AppException(ErrorCode.INVALID_REQUEST, "Tổng ghi chú xử lý tối đa 1000 ký tự.");
+        transfer.setReviewNote(combined);
     }
 
     /**
@@ -211,6 +309,9 @@ public class RoomTransferService {
         Long contractId = transferRequest.getCurrentAssignment().getContract().getContractId();
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+
+        lockTransferStay(transferRequest, true);
+        residenceService.ensureNoOpenResidenceChange(transferRequest.getStudent().getId(), null, transferRequest.getTransferId(), null);
 
         // (2) Đọc lại dữ liệu MỚI của phân phòng (khóa biên), không dùng snapshot
         // chụp lúc tạo request: nếu SV đã đổi phòng sau khi tạo request thì phân
@@ -235,6 +336,7 @@ public class RoomTransferService {
 
         // (3) Khóa CẢ HAI phòng theo ID tăng dần để tránh deadlock khi hai yêu
         // cầu chuyển phòng ngược chiều (A: X→Y, B: Y→X) chạy đồng thời.
+        residenceService.lockResidenceInvoiceRooms(transferRequest.getStudent().getId(), currentAssignment.getRoom().getId(), destinationRoomId);
         long currentRoomId = currentAssignment.getRoom().getId();
         long firstRoomId = Math.min(currentRoomId, destinationRoomId);
         long secondRoomId = Math.max(currentRoomId, destinationRoomId);
@@ -245,21 +347,24 @@ public class RoomTransferService {
                         .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
         Room currentRoom = currentRoomId == firstRoomId ? firstRoom : secondRoom;
         Room destinationRoom = destinationRoomId == firstRoomId ? firstRoom : secondRoom;
+        entityManager.refresh(firstRoom);
+        if (secondRoom != firstRoom) entityManager.refresh(secondRoom);
 
         // (4) Kiểm tra nợ SAU KHI đã khóa hợp đồng + phòng hiện tại.
         ensureNoUnpaidInvoices(contract, currentRoom);
 
-        validateDestinationRoom(transferRequest.getStudent(), destinationRoom);
+        validateDestinationRoom(transferRequest.getStudent(), destinationRoom, 0);
 
         // Quy tắc giá khi chuyển phòng (BR §13.4): chỉ cho chuyển sang phòng cùng mức giá
         // để tránh thay đổi monthlyRent/depositAmount âm thầm trong hợp đồng đang ACTIVE.
-        if (contract.getMonthlyRent() == null
-                || destinationRoom.getPricePerMonth() == null
-                || destinationRoom.getPricePerMonth().compareTo(contract.getMonthlyRent()) != 0) {
-            throw new AppException(ErrorCode.TRANSFER_PRICE_MISMATCH,
-                    "Chỉ được chuyển sang phòng cùng mức giá với hợp đồng hiện tại");
-        }
+        ensureSamePrice(contract, destinationRoom);
 
+        transferRequest.setApprovedRoom(destinationRoom);
+    }
+
+    private void moveAfterHandover(RoomTransferRequest transferRequest, RoomAssignment currentAssignment,
+                                  Room destinationRoom, User reviewer) {
+        Contract contract = currentAssignment.getContract();
         LocalDateTime transferTime = LocalDateTime.now(BUSINESS_ZONE);
         currentAssignment.setStatus(RoomAssignmentStatus.CHECKED_OUT);
         currentAssignment.setCheckOutAt(transferTime);
@@ -277,11 +382,9 @@ public class RoomTransferService {
         roomAssignmentRepository.flush();
 
         // Đồng bộ 2 phòng qua hàm recompute chuẩn duy nhất (phân biệt đúng RESERVED/OCCUPIED)
-        roomStatusService.syncOccupancyAndRefreshStatus(currentAssignment.getRoom().getId());
-        roomStatusService.syncOccupancyAndRefreshStatus(destinationRoom.getId());
+
 
         contract.setRoom(destinationRoom);
-        contract.setMonthlyRent(destinationRoom.getPricePerMonth());
         contractRepository.save(contract);
         Student student = transferRequest.getStudent();
         student.setRoom(destinationRoom);
@@ -291,25 +394,27 @@ public class RoomTransferService {
 
     /** Gọi SAU KHI đã khóa hợp đồng và phòng hiện tại — xem approveTransfer. */
     private void ensureNoUnpaidInvoices(Contract contract, Room currentRoom) {
-        if (invoiceRepository.existsByContract_ContractIdAndStatus(
-                contract.getContractId(), InvoiceStatus.UNPAID)) {
-            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES,
-                    "Không thể chuyển phòng khi hợp đồng còn hóa đơn chưa thanh toán");
-        }
-        if (currentRoom != null && invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
-                currentRoom.getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
-            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES,
-                    "Không thể chuyển phòng khi phòng hiện tại còn hóa đơn tiện ích chưa thanh toán");
-        }
+        residenceService.ensureNoUnpaidResidenceInvoices(contract);
     }
 
-    private void validateDestinationRoom(Student student, Room destinationRoom) {
+    private void ensureSamePrice(Contract contract, Room room) {
+        if (contract.getMonthlyRent() == null || room.getPricePerMonth() == null
+                || room.getPricePerMonth().compareTo(contract.getMonthlyRent()) != 0)
+            throw new AppException(ErrorCode.TRANSFER_PRICE_MISMATCH);
+    }
+
+    private void validateDestinationRoom(Student student, Room destinationRoom, int ownHold) {
         long assignmentOccupancy = roomAssignmentRepository.countByRoom_IdAndStatusIn(
                 destinationRoom.getId(), OCCUPYING_ASSIGNMENT_STATUSES);
         int occupiedSlots = Math.max(destinationRoom.getCurrentOccupancy(),
                 Math.toIntExact(assignmentOccupancy));
-        if (destinationRoom.getStatus() != RoomStatus.AVAILABLE
-                || destinationRoom.getCapacity() == null
+        occupiedSlots += Math.toIntExact(contractRepository.countByRoom_IdAndStatusIn(
+                destinationRoom.getId(), List.of(ContractStatus.PENDING))
+                + roomStatusService.pendingApplicationHolds(destinationRoom.getId())
+                + roomStatusService.transferHolds(destinationRoom.getId())) - ownHold;
+        boolean allowedStatus = destinationRoom.getStatus() == RoomStatus.AVAILABLE
+                || (ownHold == 1 && destinationRoom.getStatus() == RoomStatus.RESERVED);
+        if (!allowedStatus || destinationRoom.getCapacity() == null
                 || occupiedSlots >= destinationRoom.getCapacity()) {
             throw new AppException(ErrorCode.TRANSFER_ROOM_NOT_AVAILABLE);
         }
@@ -331,24 +436,24 @@ public class RoomTransferService {
         }
     }
 
-    private void notifyStudent(RoomTransferRequest transferRequest) {
-        User studentUser = transferRequest.getStudent().getUser();
-        if (studentUser == null) {
-            return;
+    private void notifyStudent(RoomTransferRequest request) {
+        User user = request.getStudent().getUser();
+        if (user == null) return;
+        String title;
+        String body;
+        switch (request.getStatus()) {
+            case APPROVED -> {
+                title = "Đã duyệt chuyển phòng, chờ bàn giao";
+                body = "Bạn vẫn cư trú tại phòng " + request.getCurrentAssignment().getRoom().getRoomNumber()
+                        + ". Phòng được duyệt: " + request.getApprovedRoom().getRoomNumber()
+                        + ". Vui lòng liên hệ quản lý để bàn giao trong 72 giờ kể từ khi duyệt.";
+            }
+            case COMPLETED -> { title = "Chuyển phòng thành công"; body = "Đã xác nhận bàn giao và chuyển bạn sang phòng " + request.getApprovedRoom().getRoomNumber() + ". Giá thuê, tiền cọc và thời hạn hợp đồng giữ nguyên."; }
+            case CANCELLED -> { title = "Đã hủy yêu cầu chuyển phòng"; body = "Yêu cầu chuyển phòng đã được hủy. Phòng cư trú của bạn không thay đổi."; }
+            default -> { title = "Yêu cầu chuyển phòng đã bị từ chối"; body = "Yêu cầu chuyển phòng của bạn đã bị từ chối."; }
         }
-
-        boolean approved = transferRequest.getStatus() == TransferStatus.APPROVED;
-        String title = approved
-                ? "Yêu cầu chuyển phòng đã được duyệt"
-                : "Yêu cầu chuyển phòng đã bị từ chối";
-        String body = approved
-                ? "Yêu cầu chuyển phòng của bạn đã được duyệt."
-                : "Yêu cầu chuyển phòng của bạn đã bị từ chối.";
-        if (transferRequest.getReviewNote() != null) {
-            body += " Ghi chú: " + transferRequest.getReviewNote();
-        }
-        notificationService.sendNotification(NotificationType.TRANSFER_PROCESSED,
-                title, body, transferRequest.getTransferId(), studentUser.getId());
+        if (request.getReviewNote() != null) body += " Ghi chú: " + request.getReviewNote();
+        notificationService.sendNotification(NotificationType.TRANSFER_PROCESSED, title, body, request.getTransferId(), user.getId());
     }
 
     private void validatePage(int page, int size) {
@@ -363,7 +468,9 @@ public class RoomTransferService {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND);
         }
         if (assignment.getStatus() != RoomAssignmentStatus.CHECKED_IN
-                || assignment.getContract().getStatus() != ContractStatus.ACTIVE) {
+                || assignment.getContract().getStatus() != ContractStatus.ACTIVE
+                || assignment.getContract().getEndDate() == null
+                || assignment.getContract().getEndDate().isBefore(LocalDateTime.now(BUSINESS_ZONE))) {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
                     "Chỉ sinh viên đang CHECKED_IN theo hợp đồng ACTIVE mới được chuyển phòng");
         }

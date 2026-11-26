@@ -5,7 +5,9 @@ import com.dormhub.entity.RenewalRequest;
 import org.springframework.stereotype.Component;
 
 @Component
+@lombok.RequiredArgsConstructor
 public class RenewalMapper {
+    private final com.dormhub.repository.RoomAssignmentRepository roomAssignmentRepository;
 
     public RenewalResponse toResponse(RenewalRequest request) {
         if (request == null) {
@@ -14,7 +16,10 @@ public class RenewalMapper {
 
         var contract = request.getContract();
         var student = contract.getStudent();
-        var room = contract.getRoom();
+        var stays = request.getRequestedAt() == null ? java.util.List.<com.dormhub.entity.RoomAssignment>of()
+                : roomAssignmentRepository.findActualAssignmentsForPeriod(contract.getContractId(),
+                        request.getRequestedAt(), request.getRequestedAt().plusNanos(1));
+        var room = stays.isEmpty() ? null : stays.get(0).getRoom();
         return RenewalResponse.builder()
                 .renewalRequestId(request.getRenewalRequestId())
                 .contractId(contract.getContractId())

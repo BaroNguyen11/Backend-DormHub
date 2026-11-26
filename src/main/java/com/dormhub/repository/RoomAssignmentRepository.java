@@ -19,6 +19,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, Long> {
+    // ROOM_FEE can be issued on the agreed start date before physical check-in.
+    // This allocation history is for display, never for UTILITY access/debt checks.
+    @Query("select a from RoomAssignment a join fetch a.room r left join fetch r.building "
+            + "where a.contract.contractId = :contractId "
+            + "and coalesce(a.checkInAt, a.assignedAt) < :end "
+            + "and (a.checkOutAt is null or a.checkOutAt > :start) order by a.assignmentId")
+    List<RoomAssignment> findAllocationsForInvoicePeriod(@Param("contractId") Long contractId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    @Query("select a from RoomAssignment a join fetch a.room r left join fetch r.building "
+            + "where a.contract.contractId = :contractId and a.checkInAt is not null "
+            + "and a.checkInAt < :end and (a.checkOutAt is null or a.checkOutAt > :start) "
+            + "order by a.checkInAt, a.assignmentId")
+    List<RoomAssignment> findActualAssignmentsForPeriod(@Param("contractId") Long contractId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+    @Query("select distinct a.room.id from RoomAssignment a where a.student.id = :studentId "
+            + "and a.checkInAt is not null order by a.room.id")
+    List<Long> findActualResidenceRoomIds(@Param("studentId") Long studentId);
     @Query("select distinct a.student.user.id from RoomAssignment a where a.room.id = :roomId "
             + "and a.checkInAt is not null and a.checkInAt < :end "
             + "and (a.checkOutAt is null or a.checkOutAt > :start)")
@@ -54,6 +71,7 @@ public interface RoomAssignmentRepository extends JpaRepository<RoomAssignment, 
             Long contractId);
 
     Optional<RoomAssignment> findTopByContract_ContractIdOrderByAssignmentIdDesc(Long contractId);
+    Optional<RoomAssignment> findFirstByContract_ContractIdOrderByAssignmentIdAsc(Long contractId);
 
     @Query("select case when count(assignment) > 0 then true else false end "
             + "from RoomAssignment assignment "

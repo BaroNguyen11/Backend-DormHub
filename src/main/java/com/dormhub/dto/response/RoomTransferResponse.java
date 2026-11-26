@@ -29,4 +29,16 @@ public class RoomTransferResponse {
     private final Long reviewedById;
     private final LocalDateTime reviewedAt;
     private final String reviewNote;
+    private final LocalDateTime responseDeadline;
+    private final LocalDateTime completionDeadline;
+    private final LocalDateTime completedAt;
+    private final boolean responseOverdue;
+    private final boolean completionOverdue;
+    private final boolean handoverActionsEnabled;
+    private final boolean handoverPending;
+    private final java.math.BigDecimal monthlyRent;
+    private final java.math.BigDecimal depositAmount;
+    private final com.dormhub.entity.enums.Gender studentGender;
+    private final com.dormhub.entity.enums.ContractStatus contractStatus;
+    private final LocalDateTime contractEndDate;
 }

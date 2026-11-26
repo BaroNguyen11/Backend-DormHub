@@ -40,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class CheckoutService {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private final RoomAssignmentService residenceService;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final List<CheckoutRequestStatus> OPEN_REQUEST_STATUSES =
             List.of(CheckoutRequestStatus.PENDING, CheckoutRequestStatus.APPROVED);
@@ -64,7 +65,8 @@ public class CheckoutService {
                            UserRepository userRepository,
                            CheckInOutService checkInOutService,
                            CheckoutMapper checkoutMapper,
-                           NotificationService notificationService) {
+                           NotificationService notificationService, RoomAssignmentService residenceService) {
+        this.residenceService = residenceService;
         this.checkoutRequestRepository = checkoutRequestRepository;
         this.contractRepository = contractRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
@@ -83,19 +85,10 @@ public class CheckoutService {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        Student student = getStudentByUserId(userId);
-        // Khóa biên phân phòng hiện tại (PESSIMISTIC_WRITE): hai request trả
-        // phòng đồng thời sẽ tuần tự hóa trên dòng này, nên lần kiểm tra
-        // "đã có yêu cầu trả phòng mở" bên dưới không thể bị hai luồng vượt
-        // qua cùng lúc (chặn tạo trùng yêu cầu trả phòng).
-        RoomAssignment assignment = getCurrentAssignmentForUpdate(student.getId());
-        ensureStudentIsCheckedIn(student, assignment);
+        RoomAssignment assignment = residenceService.lockResidenceChange(userId, true);
+        Student student = assignment.getStudent();
         Contract contract = assignment.getContract();
-
-        if (checkoutRequestRepository.existsByContract_ContractIdAndStatusIn(
-                contract.getContractId(), OPEN_REQUEST_STATUSES)) {
-            throw new AppException(ErrorCode.CHECKOUT_REQUEST_ALREADY_OPEN);
-        }
+        residenceService.ensureNoOpenResidenceChange(student.getId(), null, null, null);
 
         CheckoutRequest checkoutRequest = new CheckoutRequest();
         checkoutRequest.setStudent(student);
@@ -103,16 +96,20 @@ public class CheckoutService {
         checkoutRequest.setRequestDate(LocalDateTime.now(BUSINESS_ZONE));
         checkoutRequest.setStatus(CheckoutRequestStatus.PENDING);
         checkoutRequest.setReason(request.getReason().trim());
-        return checkoutMapper.toResponse(checkoutRequestRepository.save(checkoutRequest));
+        CheckoutRequest saved = checkoutRequestRepository.save(checkoutRequest);
+        notificationService.notifyResidenceRequestManagers("Yêu cầu trả phòng mới",
+                "Sinh viên " + student.getStudentCode() + " gửi yêu cầu trả phòng #" + saved.getCheckoutRequestId() + ".");
+        return checkoutMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<CheckoutResponse> getMyRequests(Long userId, int page, int size) {
+    public Page<CheckoutResponse> getMyRequests(Long userId, int page, int size, CheckoutRequestStatus status) {
         validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "requestDate"));
-        return checkoutRequestRepository.findAllByStudent_Id(student.getId(), pageable)
-                .map(checkoutMapper::toResponse);
+        return checkoutRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<CheckoutRequest>equal("student.id", student.getId())
+                        .and(equal("status", status)), pageable).map(checkoutMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -169,6 +166,8 @@ public class CheckoutService {
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
 
         if (request.getStatus() == CheckoutRequestStatus.APPROVED) {
+            residenceService.lockResidenceChange(checkoutRequest.getStudent().getUser().getId(), true);
+            residenceService.ensureNoOpenResidenceChange(checkoutRequest.getStudent().getId(), null, null, checkoutRequestId);
             validateCurrentStayForReview(checkoutRequest);
             validateNoUnpaidInvoices(checkoutRequest.getContract().getContractId());
         }
@@ -202,8 +201,20 @@ public class CheckoutService {
         // kiểm tra nợ và lúc chốt trả phòng.
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        residenceService.lockResidenceChange(contract.getStudent().getUser().getId(), true);
+        residenceService.ensureNoOpenResidenceChange(contract.getStudent().getId(), null, null, checkoutRequestId);
+        validateCurrentStayForReview(checkoutRequest);
         validateNoUnpaidInvoicesUnderLock(contract);
         validateDepositDisposition(contract, request.getDepositDisposition());
+        if (request.getDepositDisposition() == DepositStatus.FORFEITED
+                && (request.getNote() == null || request.getNote().isBlank())) {
+            throw new AppException(ErrorCode.INVALID_REQUEST, "Cần ghi rõ căn cứ xử lý không hoàn tiền cọc.");
+        }
+        if (request.getNote() != null && !request.getNote().isBlank()) {
+            String note = (checkoutRequest.getNote() == null ? "" : checkoutRequest.getNote() + "\n") + request.getNote().trim();
+            if (note.length() > 1000) throw new AppException(ErrorCode.INVALID_REQUEST, "Tổng ghi chú tối đa 1000 ký tự.");
+            checkoutRequest.setNote(note);
+        }
 
         // Quyết định cọc TRƯỚC khi checkOut để đường trả phòng duy nhất:
         // checkOut từ chối hợp đồng còn cọc HELD (không cho rơi cọc lại trạng thái HELD)
@@ -223,7 +234,7 @@ public class CheckoutService {
 
     /** Manager hủy yêu cầu APPROVED bị kẹt (SV đổi ý) — chỉ khi chưa hoàn tất trả phòng. */
     @Transactional
-    public CheckoutResponse cancelForManager(Long checkoutRequestId, CheckoutReviewRequest request) {
+    public CheckoutResponse cancelForManager(Long checkoutRequestId, CheckoutReviewRequest request, Long reviewerUserId) {
         if (request == null || request.getNote() == null || request.getNote().isBlank()) {
             throw new AppException(ErrorCode.INVALID_REQUEST, "Cần ghi rõ lý do khi hủy yêu cầu trả phòng");
         }
@@ -233,9 +244,13 @@ public class CheckoutService {
             throw new AppException(ErrorCode.CHECKOUT_REQUEST_INVALID_STATUS,
                     "Chỉ có thể hủy yêu cầu trả phòng đang PENDING hoặc APPROVED");
         }
+        checkoutRequest.setReviewedBy(userRepository.findById(reviewerUserId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND)));
         checkoutRequest.setStatus(CheckoutRequestStatus.CANCELLED);
         checkoutRequest.setProcessedAt(LocalDateTime.now(BUSINESS_ZONE));
         checkoutRequest.setNote(trimToNull(request.getNote()));
+        notificationService.sendNotification(NotificationType.GENERAL, "Yêu cầu trả phòng đã được hủy",
+                "Lý do: " + checkoutRequest.getNote(), checkoutRequestId, checkoutRequest.getStudent().getUser().getId());
         return checkoutMapper.toResponse(checkoutRequestRepository.save(checkoutRequest));
     }
 
@@ -274,18 +289,9 @@ public class CheckoutService {
 
     /** Kiểm tra nợ dạng tra cứu nhanh (dùng cho bước review — bước chốt là complete()). */
     private void validateNoUnpaidInvoices(Long contractId) {
-        if (invoiceRepository.existsByContract_ContractIdAndStatus(contractId, InvoiceStatus.UNPAID)) {
-            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
-        }
-        RoomAssignment assignment = roomAssignmentRepository
-                .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
-                .orElse(null);
-        if (assignment != null && assignment.getRoom() != null) {
-            if (invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
-                    assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
-                throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
-            }
-        }
+        Contract contract = contractRepository.findByContractIdForUpdate(contractId)
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        residenceService.ensureNoUnpaidResidenceInvoices(contract);
     }
 
     /**
@@ -295,21 +301,8 @@ public class CheckoutService {
      * phân phòng → phòng, nhất quán với luồng chuyển phòng.
      */
     private void validateNoUnpaidInvoicesUnderLock(Contract contract) {
-        Long contractId = contract.getContractId();
-        if (invoiceRepository.existsByContract_ContractIdAndStatus(contractId, InvoiceStatus.UNPAID)) {
-            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
-        }
-        RoomAssignment assignment = roomAssignmentRepository
-                .findFirstByContract_ContractIdOrderByAssignmentIdDesc(contractId)
-                .orElse(null);
-        if (assignment != null && assignment.getRoom() != null) {
-            Room currentRoom = roomRepository.findByIdForUpdate(assignment.getRoom().getId())
-                    .orElse(null);
-            if (currentRoom != null && invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
-                    currentRoom.getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY)) {
-                throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
-            }
-        }
+        residenceService.lockResidenceInvoiceRooms(contract.getStudent().getId(), contract.getRoom().getId());
+        residenceService.ensureNoUnpaidResidenceInvoices(contract);
     }
 
     private void notifyReviewResult(CheckoutRequest checkoutRequest) {

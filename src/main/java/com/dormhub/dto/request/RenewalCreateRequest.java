@@ -10,8 +10,12 @@ import lombok.Setter;
 @Setter
 public class RenewalCreateRequest {
 
-    @NotNull(message = "Ngày kết thúc mới không được để trống")
+    // Legacy clients may still send a complete ISO LocalDateTime. The service validates either form.
     private LocalDateTime requestedEndDate;
+
+    @jakarta.validation.constraints.Min(1)
+    @jakarta.validation.constraints.Max(12)
+    private Integer months;
 
     @Size(max = 1000, message = "Lý do không được vượt quá 1000 ký tự")
     private String reason;

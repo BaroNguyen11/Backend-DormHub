@@ -47,6 +47,12 @@ public interface DormApplicationRepository extends JpaRepository<DormApplication
 
     boolean existsByStudentIdAndStatusIn(Long studentId, Collection<DormApplicationStatus> statuses);
 
+    // An approved application without a contract is unresolved, not completed history.
+    @Query("select count(a) > 0 from DormApplication a where a.student.id = :studentId "
+            + "and a.status = 'APPROVED' and not exists "
+            + "(select c.contractId from Contract c where c.dormApplication = a)")
+    boolean hasUnresolvedApprovedApplication(@Param("studentId") Long studentId);
+
     boolean existsByRequestedRoomId(Long roomId);
 
     boolean existsByRequestedRoomIdAndStatusIn(

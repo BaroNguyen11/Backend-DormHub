@@ -21,7 +21,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Quy ước nghiệp vụ chuẩn (BR §6.3-6.4):
  * - occupancy (current_occupancy) = số chỗ đang được sử dụng thực tế
  *   (phân phòng ASSIGNED hoặc CHECKED_IN).
- * - hold = số hợp đồng PENDING chưa có phân phòng ASSIGNED/CHECKED_IN.
+ * - hold = hợp đồng PENDING chưa có phân phòng ASSIGNED/CHECKED_IN,
+ *   cộng yêu cầu chuyển phòng APPROVED còn chờ bàn giao (kể cả quá hạn).
  * - occupancy + holds <= capacity phải đúng ở mọi thời điểm.
  *
  * Trạng thái suy ra:
@@ -45,6 +46,39 @@ public class RoomStatusService {
     private final RoomRepository roomRepository;
     private final ContractRepository contractRepository;
     private final RoomAssignmentRepository roomAssignmentRepository;
+    private final com.dormhub.repository.RoomTransferRequestRepository transferRequestRepository;
+    private final com.dormhub.repository.DormApplicationRepository dormApplicationRepository;
+
+    @Transactional(readOnly = true)
+    public boolean isTransferHandoverReady() {
+        return transferRequestRepository.supportsCompletedStatus()
+                && !transferRequestRepository.hasIncompatibleApprovedTransfers();
+    }
+
+    public void ensureTransferHandoverReady() {
+        if (!isTransferHandoverReady()) throw new AppException(ErrorCode.TRANSFER_INVALID_STATUS,
+                "Chức năng bàn giao chuyển phòng tạm thời chưa thể sử dụng. Vui lòng liên hệ ban quản lý.");
+    }
+
+    @Transactional(readOnly = true)
+    public long transferHolds(Long roomId) {
+        // Pending handovers keep their hold across restarts and timeouts.
+        return transferRequestRepository.countApprovedHolds(roomId);
+    }
+
+    @Transactional(readOnly = true)
+    public long pendingApplicationHolds(Long roomId) {
+        return dormApplicationRepository.countByRequestedRoomIdAndStatusIn(roomId,
+                List.of(com.dormhub.entity.enums.DormApplicationStatus.PENDING));
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, Integer> transferHolds(java.util.Collection<Long> roomIds) {
+        if (roomIds.isEmpty()) return java.util.Map.of();
+        return transferRequestRepository.findApprovedHoldCounts(roomIds).stream()
+                .collect(java.util.stream.Collectors.toMap(ContractRepository.RoomHoldCountProjection::getRoomId,
+                        row -> Math.toIntExact(row.getHoldCount())));
+    }
 
     /**
      * Đếm lại occupancy từ RoomAssignment thực tế rồi tính lại trạng thái phòng.
@@ -89,7 +123,7 @@ public class RoomStatusService {
             return;
         }
         int occupancy = room.getCurrentOccupancy() == null ? 0 : room.getCurrentOccupancy();
-        long holds = contractRepository.countByRoom_IdAndStatusIn(room.getId(), HOLD_STATUSES);
+        long holds = contractRepository.countByRoom_IdAndStatusIn(room.getId(), HOLD_STATUSES) + transferHolds(room.getId());
         if (occupancy < 0 || occupancy + holds > room.getCapacity()) {
             log.warn("Dữ liệu phòng #{} vượt sức chứa: occupancy={}, holds={}, capacity={}",
                     room.getId(), occupancy, holds, room.getCapacity());

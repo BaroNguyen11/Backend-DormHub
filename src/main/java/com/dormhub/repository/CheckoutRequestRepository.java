@@ -13,6 +13,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface CheckoutRequestRepository extends JpaRepository<CheckoutRequest, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<CheckoutRequest> {
+    @Query("select count(r) > 0 from CheckoutRequest r where r.student.id = :studentId "
+            + "and r.status in ('PENDING', 'APPROVED') and r.checkoutRequestId <> :excludedId")
+    boolean hasOpenRequest(@Param("studentId") Long studentId, @Param("excludedId") Long excludedId);
 
     boolean existsByContract_ContractIdAndStatusIn(
             Long contractId, Collection<CheckoutRequestStatus> statuses);

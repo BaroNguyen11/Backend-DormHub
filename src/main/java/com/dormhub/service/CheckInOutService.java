@@ -37,6 +37,7 @@ public class CheckInOutService {
     private final RoomAssignmentMapper roomAssignmentMapper;
     private final NotificationService notificationService;
     private final RoomStatusService roomStatusService;
+    private final com.dormhub.repository.RoomTransferRequestRepository transferRequestRepository;
 
     public CheckInOutService(ContractRepository contractRepository,
                              InvoiceRepository invoiceRepository,
@@ -44,7 +45,8 @@ public class CheckInOutService {
                              RoomRepository roomRepository,
                              RoomAssignmentMapper roomAssignmentMapper,
                              NotificationService notificationService,
-                             RoomStatusService roomStatusService) {
+                             RoomStatusService roomStatusService,
+                             com.dormhub.repository.RoomTransferRequestRepository transferRequestRepository) {
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
         this.roomAssignmentRepository = roomAssignmentRepository;
@@ -52,6 +54,7 @@ public class CheckInOutService {
         this.roomAssignmentMapper = roomAssignmentMapper;
         this.notificationService = notificationService;
         this.roomStatusService = roomStatusService;
+        this.transferRequestRepository = transferRequestRepository;
     }
 
     @Transactional
@@ -107,6 +110,10 @@ public class CheckInOutService {
     @Transactional
     public RoomAssignmentResponse checkOut(Long contractId) {
         Contract contract = getContractForUpdate(contractId);
+        if (transferRequestRepository.hasOpenRequest(contract.getStudent().getId(), -1L)) {
+            throw new AppException(ErrorCode.CONTRACT_CONFLICT,
+                    "Cần xử lý yêu cầu chuyển phòng đang mở trước khi trả phòng.");
+        }
         if (contract.getStatus() != ContractStatus.ACTIVE
                 && contract.getStatus() != ContractStatus.EXPIRED) {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
@@ -118,10 +125,7 @@ public class CheckInOutService {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
                     "Chỉ có thể check-out khi phân phòng đang CHECKED_IN");
         }
-        if (invoiceRepository.existsByContract_ContractIdAndStatus(
-                contractId, InvoiceStatus.UNPAID)
-                || (assignment.getRoom() != null && invoiceRepository.existsByRoom_IdAndStatusAndInvoiceType(
-                        assignment.getRoom().getId(), InvoiceStatus.UNPAID, InvoiceType.UTILITY))) {
+        if (invoiceRepository.hasUnpaidResidenceObligation(contract.getStudent().getUser().getId())) {
             throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES);
         }
         // Thống nhất 2 đường trả phòng: cọc đang HELD phải được quyết định (hoàn/tịch thu)

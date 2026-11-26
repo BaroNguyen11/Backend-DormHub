@@ -5,7 +5,9 @@ import com.dormhub.entity.CheckoutRequest;
 import org.springframework.stereotype.Component;
 
 @Component
+@lombok.RequiredArgsConstructor
 public class CheckoutMapper {
+    private final com.dormhub.repository.RoomAssignmentRepository roomAssignmentRepository;
 
     public CheckoutResponse toResponse(CheckoutRequest request) {
         if (request == null) {
@@ -13,12 +15,15 @@ public class CheckoutMapper {
         }
 
         var student = request.getStudent();
-        var room = request.getContract().getRoom();
+        var stays = request.getRequestDate() == null ? java.util.List.<com.dormhub.entity.RoomAssignment>of()
+                : roomAssignmentRepository.findActualAssignmentsForPeriod(request.getContract().getContractId(),
+                        request.getRequestDate(), request.getRequestDate().plusNanos(1));
+        var room = stays.isEmpty() ? null : stays.get(0).getRoom();
         return CheckoutResponse.builder()
                 .checkoutRequestId(request.getCheckoutRequestId())
                 .studentId(request.getStudent().getId())
                 .contractId(request.getContract().getContractId())
-                .roomId(request.getContract().getRoom().getId())
+                .roomId(room == null ? null : room.getId())
                 .studentName(student.getUser() != null && student.getUser().getFullName() != null
                         ? student.getUser().getFullName() : student.getFullName())
                 .studentCode(student.getStudentCode())

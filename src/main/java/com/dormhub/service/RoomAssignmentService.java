@@ -40,6 +40,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @Transactional(readOnly = true)
 public class RoomAssignmentService {
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final List<RoomAssignmentStatus> ACTIVE_ASSIGNMENT_STATUSES =
@@ -55,6 +57,9 @@ public class RoomAssignmentService {
     private final RoomAssignmentMapper roomAssignmentMapper;
     private final RoomStatusService roomStatusService;
     private final NotificationService notificationService;
+    private final com.dormhub.repository.RenewalRequestRepository renewalRequestRepository;
+    private final com.dormhub.repository.RoomTransferRequestRepository transferRequestRepository;
+    private final com.dormhub.repository.CheckoutRequestRepository checkoutRequestRepository;
     public RoomAssignmentService(RoomAssignmentRepository roomAssignmentRepository,
                                  ContractRepository contractRepository,
                                  InvoiceRepository invoiceRepository,
@@ -62,7 +67,10 @@ public class RoomAssignmentService {
                                  BuildingRepository buildingRepository,
                                  StudentRepository studentRepository,
                                  RoomAssignmentMapper roomAssignmentMapper,
-                                 RoomStatusService roomStatusService, NotificationService notificationService) {
+                                 RoomStatusService roomStatusService, NotificationService notificationService,
+                                 com.dormhub.repository.RenewalRequestRepository renewalRequestRepository,
+                                 com.dormhub.repository.RoomTransferRequestRepository transferRequestRepository,
+                                 com.dormhub.repository.CheckoutRequestRepository checkoutRequestRepository) {
         this.roomAssignmentRepository = roomAssignmentRepository;
         this.contractRepository = contractRepository;
         this.invoiceRepository = invoiceRepository;
@@ -72,6 +80,58 @@ public class RoomAssignmentService {
         this.roomAssignmentMapper = roomAssignmentMapper;
         this.roomStatusService = roomStatusService;
         this.notificationService = notificationService;
+        this.renewalRequestRepository = renewalRequestRepository;
+        this.transferRequestRepository = transferRequestRepository;
+        this.checkoutRequestRepository = checkoutRequestRepository;
+    }
+
+    /** Shared write boundary for all three residence-change workflows: contract -> student -> assignment. */
+    @Transactional
+    public RoomAssignment lockResidenceChange(Long userId, boolean allowExpired) {
+        Student student = studentRepository.findByUserId(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        RoomAssignment current = roomAssignmentRepository.findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
+                student.getId(), RoomAssignmentStatus.CHECKED_IN)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
+        Contract contract = contractRepository.findByContractIdForUpdate(current.getContract().getContractId())
+                .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
+        entityManager.refresh(contract);
+        studentRepository.findByUserIdForUpdate(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
+        RoomAssignment locked = roomAssignmentRepository.findByAssignmentIdForUpdate(current.getAssignmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_ASSIGNMENT_NOT_FOUND));
+        entityManager.refresh(locked);
+        if (locked.getStatus() != RoomAssignmentStatus.CHECKED_IN
+                || !java.util.Objects.equals(contract.getStudent().getId(), student.getId())
+                || (contract.getStatus() != ContractStatus.ACTIVE
+                    && !(allowExpired && contract.getStatus() == ContractStatus.EXPIRED))) {
+            throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS);
+        }
+        return locked;
+    }
+
+    public void ensureNoOpenResidenceChange(Long studentId, Long renewalId, Long transferId, Long checkoutId) {
+        if (renewalRequestRepository.hasOpenRequest(studentId, renewalId == null ? -1L : renewalId)
+                || transferRequestRepository.hasOpenRequest(studentId, transferId == null ? -1L : transferId)
+                || checkoutRequestRepository.hasOpenRequest(studentId, checkoutId == null ? -1L : checkoutId)) {
+            throw new AppException(ErrorCode.CONTRACT_CONFLICT,
+                    "Bạn đang có yêu cầu gia hạn, chuyển phòng hoặc trả phòng chưa hoàn tất. Vui lòng xử lý yêu cầu hiện tại trước.");
+        }
+    }
+
+    /** Lock historical rooms as well: delayed UTILITY billing uses the same room lock. */
+    public void lockResidenceInvoiceRooms(Long studentId, Long... extraRoomIds) {
+        var ids = new java.util.TreeSet<>(roomAssignmentRepository.findActualResidenceRoomIds(studentId));
+        for (Long id : extraRoomIds) if (id != null) ids.add(id);
+        for (Long id : ids) roomRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new AppException(ErrorCode.ROOM_NOT_FOUND));
+    }
+
+    public void ensureNoUnpaidResidenceInvoices(Contract contract) {
+        if (invoiceRepository.hasUnpaidResidenceObligation(contract.getStudent().getUser().getId())) {
+            throw new AppException(ErrorCode.CONTRACT_HAS_UNPAID_INVOICES,
+                    "Bạn còn hóa đơn tiền phòng hoặc điện nước thuộc thời gian cư trú chưa thanh toán.");
+        }
     }
 
     @Transactional
@@ -117,6 +177,7 @@ public class RoomAssignmentService {
 
         long otherPendingHolds = contractRepository.countByRoom_IdAndStatusIn(
                 room.getId(), ROOM_HOLD_STATUSES)
+                + roomStatusService.transferHolds(room.getId()) + roomStatusService.pendingApplicationHolds(room.getId())
                 - (contract.getStatus() == ContractStatus.PENDING ? 1 : 0);
         if (room.getCurrentOccupancy() + otherPendingHolds >= room.getCapacity()) {
             throw new AppException(ErrorCode.ROOM_FULL);

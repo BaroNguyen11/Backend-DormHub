@@ -32,6 +32,12 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
+    @Transactional
+    public void notifyResidenceRequestManagers(String title, String body) {
+        sendNotification(NotificationType.GENERAL, title, body, null,
+                userRepository.findAllByRole(com.dormhub.entity.enums.Role.MANAGER).stream()
+                        .map(User::getId).toList());
+    }
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 

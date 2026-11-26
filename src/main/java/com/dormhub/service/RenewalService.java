@@ -40,6 +40,7 @@ public class RenewalService {
 
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private static final int MAX_PAGE_SIZE = 100;
+    private final RoomAssignmentService residenceService;
 
     private final ContractRepository contractRepository;
     private final RenewalRequestRepository renewalRequestRepository;
@@ -57,7 +58,8 @@ public class RenewalService {
                           UserRepository userRepository,
                           RenewalMapper renewalMapper,
                           NotificationService notificationService,
-                          RoomAssignmentRepository roomAssignmentRepository) {
+                          RoomAssignmentRepository roomAssignmentRepository, RoomAssignmentService residenceService) {
+        this.residenceService = residenceService;
         this.contractRepository = contractRepository;
         this.renewalRequestRepository = renewalRequestRepository;
         this.checkoutRequestRepository = checkoutRequestRepository;
@@ -70,12 +72,15 @@ public class RenewalService {
 
     @Transactional
     public RenewalResponse create(Long contractId, RenewalCreateRequest request, Long userId) {
-        if (request == null || request.getRequestedEndDate() == null) {
+        if (request == null || (request.getRequestedEndDate() == null && request.getMonths() == null)) {
             throw new AppException(ErrorCode.INVALID_REQUEST);
         }
 
-        Student student = getStudentByUserId(userId);
-        Contract contract = getContractForUpdate(contractId);
+        var assignment = residenceService.lockResidenceChange(userId, false);
+        Student student = assignment.getStudent();
+        Contract contract = assignment.getContract();
+        if (!Objects.equals(contract.getContractId(), contractId)) throw new AppException(ErrorCode.CONTRACT_NOT_FOUND);
+        residenceService.ensureNoOpenResidenceChange(student.getId(), null, null, null);
         ensureStudentOwnsContract(contract, student.getId());
         ensureActiveContract(contract);
         if (!roomAssignmentRepository.existsByContract_ContractIdAndStatusIn(
@@ -83,7 +88,7 @@ public class RenewalService {
             throw new AppException(ErrorCode.RENEWAL_INVALID_STATUS,
                     "Chỉ có thể gia hạn sau khi đã nhận phòng");
         }
-        ensureRequestedEndDateIsAfterCurrent(contract, request.getRequestedEndDate());
+        LocalDateTime requestedEnd = resolveRequestedEnd(contract, request);
         // Cross-validation: không cho nộp gia hạn khi còn yêu cầu trả phòng đang mở
         ensureNoOpenCheckoutRequest(contractId);
 
@@ -94,22 +99,26 @@ public class RenewalService {
 
         RenewalRequest renewalRequest = new RenewalRequest();
         renewalRequest.setContract(contract);
-        renewalRequest.setRequestedEndDate(request.getRequestedEndDate());
+        renewalRequest.setRequestedEndDate(requestedEnd);
         renewalRequest.setReason(trimToNull(request.getReason()));
         renewalRequest.setStatus(RenewalStatus.PENDING);
         renewalRequest.setRequestedAt(LocalDateTime.now(BUSINESS_ZONE));
 
-        return renewalMapper.toResponse(renewalRequestRepository.save(renewalRequest));
+        RenewalRequest saved = renewalRequestRepository.save(renewalRequest);
+        notificationService.notifyResidenceRequestManagers("Yêu cầu gia hạn hợp đồng mới",
+                "Sinh viên " + student.getStudentCode() + " gửi yêu cầu gia hạn #" + saved.getRenewalRequestId() + ".");
+        return renewalMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
-    public Page<RenewalResponse> getMyRequests(Long userId, int page, int size) {
+    public Page<RenewalResponse> getMyRequests(Long userId, int page, int size, RenewalStatus status) {
         validatePage(page, size);
         Student student = getStudentByUserId(userId);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
-        return renewalRequestRepository.findAllByContract_Student_Id(student.getId(), pageable)
-                .map(renewalMapper::toResponse);
+        return renewalRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<RenewalRequest>equal("contract.student.id", student.getId())
+                        .and(equal("status", status)), pageable).map(renewalMapper::toResponse);
     }
 
     @Transactional(readOnly = true)
@@ -165,6 +174,8 @@ public class RenewalService {
 
         Contract contract = getContractForUpdate(renewalRequest.getContract().getContractId());
         if (request.getStatus() == RenewalStatus.APPROVED) {
+            residenceService.lockResidenceChange(contract.getStudent().getUser().getId(), false);
+            residenceService.ensureNoOpenResidenceChange(contract.getStudent().getId(), renewalRequestId, null, null);
             ensureActiveContract(contract);
             ensureRequestedEndDateIsAfterCurrent(contract, renewalRequest.getRequestedEndDate());
             // Cross-validation (plan Issue #16): chặn gia hạn khi còn yêu cầu trả phòng đang mở
@@ -263,11 +274,32 @@ public class RenewalService {
         }
     }
 
-    private void ensureRequestedEndDateIsAfterCurrent(
-            Contract contract, LocalDateTime requestedEndDate) {
-        if (contract.getEndDate() == null || !requestedEndDate.isAfter(contract.getEndDate())) {
+    private void ensureRequestedEndDateIsAfterCurrent(Contract contract, LocalDateTime requestedEndDate) {
+        if (contract.getEndDate() == null || requestedEndDate == null) {
             throw new AppException(ErrorCode.RENEWAL_END_DATE_INVALID);
         }
+        long months = java.time.temporal.ChronoUnit.MONTHS.between(
+                java.time.YearMonth.from(contract.getEndDate()), java.time.YearMonth.from(requestedEndDate));
+        if (months < 1 || months > 12 || !requestedEndDate.isAfter(contract.getEndDate())
+                || !requestedEndDate.equals(java.time.YearMonth.from(requestedEndDate).atEndOfMonth().atTime(23, 59, 59))) {
+            throw new AppException(ErrorCode.RENEWAL_END_DATE_INVALID,
+                    "Chỉ được gia hạn từ 1 đến 12 tháng, kết thúc vào ngày cuối tháng lúc 23:59:59.");
+        }
+    }
+
+    private LocalDateTime resolveRequestedEnd(Contract contract, RenewalCreateRequest request) {
+        LocalDateTime proposed = request.getRequestedEndDate();
+        if (request.getMonths() != null) {
+            if (request.getMonths() < 1 || request.getMonths() > 12 || contract.getEndDate() == null)
+                throw new AppException(ErrorCode.RENEWAL_END_DATE_INVALID);
+            LocalDateTime calculated = java.time.YearMonth.from(contract.getEndDate())
+                    .plusMonths(request.getMonths()).atEndOfMonth().atTime(23, 59, 59);
+            if (proposed != null && !proposed.equals(calculated))
+                throw new AppException(ErrorCode.RENEWAL_END_DATE_INVALID);
+            proposed = calculated;
+        }
+        ensureRequestedEndDateIsAfterCurrent(contract, proposed);
+        return proposed;
     }
 
     private String trimToNull(String value) {
