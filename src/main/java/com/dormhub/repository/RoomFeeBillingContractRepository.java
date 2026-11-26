@@ -14,10 +14,13 @@ public interface RoomFeeBillingContractRepository extends JpaRepository<Contract
     @Query("select max(c.contractId) from Contract c")
     Long findHighestContractId();
 
+    @Query("select min(c.startDate) from Contract c where c.status = 'ACTIVE'")
+    LocalDateTime findEarliestActiveStart();
+
     @Query("select c.contractId from Contract c "
             + "where c.contractId > :afterId and c.contractId <= :highestId "
-            + "and c.status = :status and c.startDate < :nextMonthStart "
-            + "and c.startDate < :monthStart "
+            + "and c.status = :status "
+            + "and c.startDate < :nextMonthStart and c.startDate <= :now "
             + "and c.endDate >= :monthStart order by c.contractId asc")
     List<Long> findEligibleIdsAfter(
             @Param("afterId") Long afterId,
@@ -25,5 +28,6 @@ public interface RoomFeeBillingContractRepository extends JpaRepository<Contract
             @Param("status") ContractStatus status,
             @Param("monthStart") LocalDateTime monthStart,
             @Param("nextMonthStart") LocalDateTime nextMonthStart,
+            @Param("now") LocalDateTime now,
             Pageable pageable);
 }

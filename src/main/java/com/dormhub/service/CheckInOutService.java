@@ -6,6 +6,7 @@ import com.dormhub.entity.Room;
 import com.dormhub.entity.RoomAssignment;
 import com.dormhub.entity.Student;
 import com.dormhub.entity.enums.ContractStatus;
+import com.dormhub.entity.enums.DepositStatus;
 import com.dormhub.entity.enums.InvoiceStatus;
 import com.dormhub.entity.enums.InvoiceType;
 import com.dormhub.entity.enums.NotificationType;
@@ -19,6 +20,7 @@ import com.dormhub.repository.InvoiceRepository;
 import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.RoomRepository;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import org.springframework.stereotype.Service;
@@ -58,6 +60,12 @@ public class CheckInOutService {
         if (contract.getStatus() != ContractStatus.ACTIVE) {
             throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
                     "Chỉ có thể check-in khi hợp đồng đang ACTIVE");
+        }
+        if (contract.getDepositStatus() != DepositStatus.HELD
+                || contract.getStartDate() == null
+                || contract.getStartDate().toLocalDate().isAfter(LocalDate.now(BUSINESS_ZONE))) {
+            throw new AppException(ErrorCode.ROOM_ASSIGNMENT_INVALID_STATUS,
+                    "Chưa thanh toán cọc, chưa xác nhận ngày nhận phòng hoặc chưa đến ngày bắt đầu hợp đồng");
         }
 
         RoomAssignment assignment = getCurrentAssignmentForUpdate(contractId);

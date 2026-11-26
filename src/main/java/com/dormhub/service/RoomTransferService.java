@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.RoomTransferCreateRequest;
 import com.dormhub.dto.request.RoomTransferReviewRequest;
 import com.dormhub.dto.response.RoomTransferResponse;
@@ -150,13 +152,12 @@ public class RoomTransferService {
 
     @Transactional(readOnly = true)
     public Page<RoomTransferResponse> getRequestsForManager(
-            TransferStatus status, int page, int size) {
+            TransferStatus status, int page, int size, String search) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
-        Page<RoomTransferRequest> requests = status == null
-                ? transferRequestRepository.findAll(pageable)
-                : transferRequestRepository.findAllByStatus(status, pageable);
+        Page<RoomTransferRequest> requests = transferRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<RoomTransferRequest>text(search, "transferId", "student.studentCode", "student.fullName", "student.user.fullName", "currentAssignment.room.roomNumber", "preferredRoom.roomNumber", "approvedRoom.roomNumber", "reason", "reviewNote").and(equal("status", status)), pageable);
         return requests.map(roomTransferMapper::toResponse);
     }
 

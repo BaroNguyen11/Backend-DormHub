@@ -52,10 +52,18 @@ logging:
 
 
 dormhub:
+  contract:
+    landlord:
+      name: Ban quản lý ký túc xá DormHub
+      representative: Nguyễn Văn Bảo
+      position: Quản lý ký túc xá DormHub
+      address: TP. Hồ Chí Minh
+      phone: '0988777222'
+      email: bao927471@gmail.com
   jwt:
     secret: ${DORMHUB_JWT_SECRET}
     access-token-minutes: 15
-    cookie-secure: ${DORMHUB_COOKIE_SECURE:true}
+    cookie-secure: ${DORMHUB_COOKIE_SECURE:false}
 
   sepay:
     api-key: ${DORMHUB_SEPAY_API_KEY}

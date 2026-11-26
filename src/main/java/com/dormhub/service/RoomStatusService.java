@@ -21,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Quy ước nghiệp vụ chuẩn (BR §6.3-6.4):
  * - occupancy (current_occupancy) = số chỗ đang được sử dụng thực tế
  *   (phân phòng ASSIGNED hoặc CHECKED_IN).
- * - hold = số hợp đồng PENDING đang giữ chỗ chờ thanh toán cọc.
+ * - hold = số hợp đồng PENDING chưa có phân phòng ASSIGNED/CHECKED_IN.
  * - occupancy + holds <= capacity phải đúng ở mọi thời điểm.
  *
  * Trạng thái suy ra:
@@ -54,11 +54,9 @@ public class RoomStatusService {
     @Transactional
     public void syncOccupancyAndRefreshStatus(Long roomId) {
         Room room = lockRoom(roomId);
-        if (room.getStatus() != RoomStatus.MAINTENANCE) {
-            int occupancy = Math.toIntExact(roomAssignmentRepository
-                    .countByRoom_IdAndStatusIn(roomId, OCCUPYING_STATUSES));
-            room.setCurrentOccupancy(occupancy);
-        }
+        int occupancy = Math.toIntExact(roomAssignmentRepository
+                .countByRoom_IdAndStatusIn(roomId, OCCUPYING_STATUSES));
+        room.setCurrentOccupancy(occupancy);
         applyComputedStatus(room, false);
         roomRepository.save(room);
     }

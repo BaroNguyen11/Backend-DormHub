@@ -13,10 +13,17 @@ public class RenewalMapper {
         }
 
         var contract = request.getContract();
+        var student = contract.getStudent();
+        var room = contract.getRoom();
         return RenewalResponse.builder()
                 .renewalRequestId(request.getRenewalRequestId())
                 .contractId(contract.getContractId())
                 .studentId(contract.getStudent().getId())
+                .studentName(student.getUser() != null && student.getUser().getFullName() != null
+                        ? student.getUser().getFullName() : student.getFullName())
+                .studentCode(student.getStudentCode())
+                .roomNumber(room == null ? null : room.getRoomNumber())
+                .buildingName(room == null || room.getBuilding() == null ? null : room.getBuilding().getName())
                 .requestedEndDate(request.getRequestedEndDate())
                 .contractEndDate(contract.getEndDate())
                 .reason(request.getReason())

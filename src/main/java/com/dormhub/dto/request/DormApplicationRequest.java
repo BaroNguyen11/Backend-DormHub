@@ -16,4 +16,6 @@ public class DormApplicationRequest {
 
     @Size(max = 2000, message = "note tối đa 2000 ký tự")
     private String note;
+
+    private Boolean contractAccepted;
 }

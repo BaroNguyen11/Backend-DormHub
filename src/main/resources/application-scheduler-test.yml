@@ -1,0 +1,23 @@
+# All scheduled writes are opt-in in this profile. Datasource must be overridden separately.
+billing:
+  utility:
+    cron: "-"
+    reconcile-on-startup: false
+  room-fee:
+    cron: "-"
+    reconcile-cron: "-"
+    reconcile-on-startup: false
+dormhub:
+  payment:
+    reconcile-cron: "-"
+  scheduler:
+    contract:
+      unpaid-deposits-cron: "-"
+      expire-cron: "-"
+      reminder-cron: "-"
+    notification:
+      due-reminder-cron: "-"
+      overdue-reminder-cron: "-"
+      cleanup-cron: "-"
+    token:
+      cleanup-cron: "-"

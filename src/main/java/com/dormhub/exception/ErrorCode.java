@@ -64,6 +64,7 @@ public enum ErrorCode {
     DORM_APPLICATION_INVALID_REVIEW_STATUS(HttpStatus.BAD_REQUEST, "Trạng thái xử lý chỉ được là APPROVED hoặc REJECTED"),
     DORM_APPLICATION_REJECTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "Cần ghi rõ lý do khi từ chối đơn đăng ký"),
     DORM_APPLICATION_ROOM_REQUIRED(HttpStatus.BAD_REQUEST, "Cần chọn phòng trước khi nộp đơn"),
+    DORM_APPLICATION_CONTRACT_NOT_ACCEPTED(HttpStatus.BAD_REQUEST, "Vui lòng đọc và đồng ý với hợp đồng dự thảo trước khi nộp đơn"),
     DORM_APPLICATION_GENDER_UNSUPPORTED(HttpStatus.BAD_REQUEST, "Chỉ sinh viên có giới tính MALE hoặc FEMALE mới được đăng ký nội trú"),
     STUDENT_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Sinh viên đã được phân phòng"),
     DORM_APPLICATION_ALREADY_ASSIGNED(HttpStatus.CONFLICT, "Đơn đăng ký đã có phân phòng đang hiệu lực"),

@@ -3,6 +3,7 @@ package com.dormhub.repository;
 import com.dormhub.entity.Contract;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.Gender;
+import com.dormhub.entity.enums.DepositStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
@@ -18,7 +19,7 @@ import java.util.Optional;
 import java.util.Collection;
 import java.util.List;
 
-public interface ContractRepository extends JpaRepository<Contract, Long> {
+public interface ContractRepository extends JpaRepository<Contract, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Contract> {
 
     boolean existsByStudent_IdAndStatusIn(Long studentId, Collection<ContractStatus> statuses);
 
@@ -32,11 +33,18 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
             @Param("statuses") Collection<ContractStatus> statuses,
             @Param("gender") Gender gender);
 
-    long countByRoom_IdAndStatusIn(Long roomId, Collection<ContractStatus> statuses);
+    @Query("select count(contract) from Contract contract "
+            + "where contract.room.id = :roomId and contract.status in :statuses "
+            + "and not exists (select assignment.assignmentId from RoomAssignment assignment "
+            + "where assignment.contract = contract and assignment.status in ('ASSIGNED', 'CHECKED_IN'))")
+    long countByRoom_IdAndStatusIn(@Param("roomId") Long roomId,
+                                   @Param("statuses") Collection<ContractStatus> statuses);
 
     @Query("select contract.room.id as roomId, count(contract.contractId) as holdCount "
             + "from Contract contract "
             + "where contract.room.id in :roomIds and contract.status in :statuses "
+            + "and not exists (select assignment.assignmentId from RoomAssignment assignment "
+            + "where assignment.contract = contract and assignment.status in ('ASSIGNED', 'CHECKED_IN')) "
             + "group by contract.room.id")
     List<RoomHoldCountProjection> findRoomHoldCounts(
             @Param("roomIds") Collection<Long> roomIds,
@@ -102,4 +110,5 @@ public interface ContractRepository extends JpaRepository<Contract, Long> {
     int bulkExpireOverdueContracts(@Param("currentStatus") ContractStatus currentStatus,
                                    @Param("newStatus") ContractStatus newStatus,
                                    @Param("now") LocalDateTime now);
+
 }

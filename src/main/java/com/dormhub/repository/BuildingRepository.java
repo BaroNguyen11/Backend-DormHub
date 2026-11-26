@@ -11,7 +11,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Optional;
 
 @Repository
-public interface BuildingRepository extends JpaRepository<Building, Long> {
+public interface BuildingRepository extends JpaRepository<Building, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Building> {
     boolean existsByBuildingCode(String buildingCode);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)

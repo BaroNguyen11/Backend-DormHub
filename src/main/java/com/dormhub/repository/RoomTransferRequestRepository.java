@@ -12,7 +12,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RoomTransferRequestRepository
-        extends JpaRepository<RoomTransferRequest, Long> {
+        extends JpaRepository<RoomTransferRequest, Long>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<RoomTransferRequest> {
 
     boolean existsByStudent_IdAndStatus(Long studentId, TransferStatus status);
 

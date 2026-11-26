@@ -78,7 +78,8 @@ public class RoomAssignmentService {
     public RoomAssignmentResponse assign(Long contractId) {
         Contract contract = contractRepository.findByContractIdForUpdate(contractId)
                 .orElseThrow(() -> new AppException(ErrorCode.CONTRACT_NOT_FOUND));
-        if (contract.getStatus() != ContractStatus.ACTIVE
+        if ((contract.getStatus() != ContractStatus.PENDING
+                && contract.getStatus() != ContractStatus.ACTIVE)
                 || contract.getDepositStatus() != DepositStatus.HELD) {
             throw new AppException(ErrorCode.CONTRACT_NOT_ACTIVE);
         }
@@ -115,7 +116,8 @@ public class RoomAssignmentService {
         ensureGenderMatches(student.getGender(), building.getGenderRestriction());
 
         long otherPendingHolds = contractRepository.countByRoom_IdAndStatusIn(
-                room.getId(), ROOM_HOLD_STATUSES);
+                room.getId(), ROOM_HOLD_STATUSES)
+                - (contract.getStatus() == ContractStatus.PENDING ? 1 : 0);
         if (room.getCurrentOccupancy() + otherPendingHolds >= room.getCapacity()) {
             throw new AppException(ErrorCode.ROOM_FULL);
         }
@@ -140,8 +142,11 @@ public class RoomAssignmentService {
             notificationService.sendNotification(
                     NotificationType.ROOM_ASSIGNED,
                     "Đã được phân phòng",
-                    String.format("Bạn đã được phân vào phòng %s, tòa %s. Vui lòng đến văn phòng KTX để nhận phòng.",
-                            room.getRoomNumber(), room.getBuilding().getName()),
+                    contract.getStatus() == ContractStatus.PENDING
+                            ? String.format("Bạn đã được phân vào phòng %s, tòa %s. Vui lòng chọn ngày nhận phòng trên DormHub trong vòng 7 ngày sau khi đóng cọc.",
+                                    room.getRoomNumber(), room.getBuilding().getName())
+                            : String.format("Bạn đã được phân vào phòng %s, tòa %s. Vui lòng đến văn phòng KTX để nhận phòng.",
+                                    room.getRoomNumber(), room.getBuilding().getName()),
                     contract.getContractId(),
                     student.getUser().getId());
         }
@@ -161,12 +166,12 @@ public class RoomAssignmentService {
                 .orElseThrow(() -> new AppException(ErrorCode.STUDENT_NOT_FOUND));
         LocalDateTime now = LocalDateTime.now();
         return roomAssignmentRepository.findCurrentResidences(
-                        student.getId(), ACTIVE_ASSIGNMENT_STATUSES, ContractStatus.ACTIVE, now)
+                        student.getId(), List.of(RoomAssignmentStatus.CHECKED_IN), ContractStatus.ACTIVE, now)
                 .stream()
                 .findFirst()
                 .map(assignment -> roomAssignmentRepository.findCurrentRoommates(
                         assignment.getRoom().getId(), student.getId(),
-                        ACTIVE_ASSIGNMENT_STATUSES, ContractStatus.ACTIVE, now))
+                        List.of(RoomAssignmentStatus.CHECKED_IN), ContractStatus.ACTIVE, now))
                 .orElseGet(List::of);
     }
 

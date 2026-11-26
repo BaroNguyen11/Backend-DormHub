@@ -17,6 +17,10 @@ public class CheckoutResponse {
     private final Long studentId;
     private final Long contractId;
     private final Long roomId;
+    private final String studentName;
+    private final String studentCode;
+    private final String roomNumber;
+    private final String buildingName;
     private final LocalDateTime requestDate;
     private final LocalDate checkoutDate;
     private final CheckoutRequestStatus status;

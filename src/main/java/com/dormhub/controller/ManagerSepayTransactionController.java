@@ -36,9 +36,10 @@ public class ManagerSepayTransactionController {
     public ResponseEntity<ApiResponse<Page<SepayTransactionResponse>>> search(
             @RequestParam(required = false) SepayTransactionStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String search) {
         Page<SepayTransactionResponse> transactions =
-                adminService.search(status, page, size);
+                adminService.search(status, page, size, search);
         return ResponseEntity.ok(ApiResponse.success(
                 "Get sepay transactions successfully", transactions));
     }

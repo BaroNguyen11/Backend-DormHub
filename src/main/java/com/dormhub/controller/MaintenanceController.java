@@ -59,13 +59,14 @@ public class MaintenanceController {
 
     @GetMapping("/manager/maintenance")
     public ResponseEntity<ApiResponse<Page<MaintenanceResponse>>> getRequestsForManager(
+            @RequestParam(required = false) String search,
             @RequestParam(required = false) MaintenanceStatus status,
             @RequestParam(required = false) MaintenancePriority priority,
             @RequestParam(required = false) MaintenanceType type,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size
     ) {
-        Page<MaintenanceResponse> response = maintenanceService.getRequestsForManager(status, priority, type, page, size);
+        Page<MaintenanceResponse> response = maintenanceService.getRequestsForManager(status, priority, type, page, size, search);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu bảo trì cho quản lý thành công", response));
     }
 

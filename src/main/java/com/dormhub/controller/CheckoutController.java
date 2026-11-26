@@ -71,9 +71,10 @@ public class CheckoutController {
     public ResponseEntity<ApiResponse<Page<CheckoutResponse>>> getRequestsForManager(
             @RequestParam(required = false) CheckoutRequestStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu trả phòng thành công",
-                checkoutService.getRequestsForManager(status, page, size)));
+                checkoutService.getRequestsForManager(status, page, size, search)));
     }
 
     @GetMapping("/manager/checkout-requests/{checkoutRequestId}")

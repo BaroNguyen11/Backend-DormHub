@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.CheckoutCreateRequest;
 import com.dormhub.dto.request.CheckoutCompleteRequest;
 import com.dormhub.dto.request.CheckoutReviewRequest;
@@ -134,12 +136,11 @@ public class CheckoutService {
 
     @Transactional(readOnly = true)
     public Page<CheckoutResponse> getRequestsForManager(
-            CheckoutRequestStatus status, int page, int size) {
+            CheckoutRequestStatus status, int page, int size, String search) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "requestDate"));
-        Page<CheckoutRequest> requests = status == null
-                ? checkoutRequestRepository.findAll(pageable)
-                : checkoutRequestRepository.findAllByStatus(status, pageable);
+        Page<CheckoutRequest> requests = checkoutRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<CheckoutRequest>text(search, "checkoutRequestId", "student.studentCode", "student.fullName", "student.user.fullName", "contract.room.roomNumber", "reason", "note").and(equal("status", status)), pageable);
         return requests.map(checkoutMapper::toResponse);
     }
 

@@ -27,9 +27,10 @@ public class ManagerDormApplicationController {
     @GetMapping
     public ResponseEntity<ApiResponse<Page<DormApplicationResponse>>> getAll(
             @RequestParam(required = false) DormApplicationStatus status,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return ResponseEntity.ok(ApiResponse.success(dormApplicationService.getAll(status, page, size)));
+        return ResponseEntity.ok(ApiResponse.success(dormApplicationService.getAll(status, page, size, search)));
     }
 
     @GetMapping("/{id}")

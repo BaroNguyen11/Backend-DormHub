@@ -71,9 +71,10 @@ public class RenewalController {
     public ResponseEntity<ApiResponse<Page<RenewalResponse>>> getRequestsForManager(
             @RequestParam(required = false) RenewalStatus status,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String search) {
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách yêu cầu gia hạn thành công",
-                renewalService.getRequestsForManager(status, page, size)));
+                renewalService.getRequestsForManager(status, page, size, search)));
     }
 
     @GetMapping("/manager/renewal-requests/{renewalRequestId}")

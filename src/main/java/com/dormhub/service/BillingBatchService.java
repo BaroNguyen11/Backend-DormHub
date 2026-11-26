@@ -2,6 +2,7 @@ package com.dormhub.service;
 
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.repository.RoomFeeBillingContractRepository;
+import com.dormhub.repository.MeterReadingRepository;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.ZoneId;
@@ -19,10 +20,42 @@ public class BillingBatchService {
 
     private final RoomFeeBillingContractRepository contractRepository;
     private final InvoiceService invoiceService;
+    private final MeterReadingRepository meterReadingRepository;
 
-    public BillingBatchService(RoomFeeBillingContractRepository contractRepository, InvoiceService invoiceService) {
+    public BillingBatchService(RoomFeeBillingContractRepository contractRepository, InvoiceService invoiceService,
+            MeterReadingRepository meterReadingRepository) {
         this.contractRepository = contractRepository;
         this.invoiceService = invoiceService;
+        this.meterReadingRepository = meterReadingRepository;
+    }
+
+    public void generateUtilityInvoices() {
+        long created = 0, skipped = 0, failed = 0, afterId = 0;
+        try {
+            while (true) {
+                var readings = meterReadingRepository.findUnbilledConfirmedAfter(afterId,
+                        YearMonth.now(BUSINESS_ZONE), PageRequest.of(0, PAGE_SIZE));
+                if (readings.isEmpty()) break;
+                for (var reading : readings) {
+                    afterId = reading.getReadingId();
+                    try {
+                        if (invoiceService.createUtilityIfAbsent(reading.getRoom().getId(), reading.getReadingMonth())) created++;
+                        else skipped++;
+                    } catch (Exception error) {
+                        failed++;
+                        log.error("UTILITY billing failed: readingId={}, roomId={}, month={}, errorType={}",
+                                reading.getReadingId(), reading.getRoom().getId(), reading.getReadingMonth(), error.getClass().getSimpleName());
+                    }
+                }
+            }
+        } finally {
+            log.info("UTILITY billing complete: created={}, skipped={}, failed={}", created, skipped, failed);
+        }
+    }
+
+    public YearMonth earliestActiveMonth() {
+        LocalDateTime earliest = contractRepository.findEarliestActiveStart();
+        return earliest == null ? null : YearMonth.from(earliest);
     }
 
     public void generateRoomFees(YearMonth month) {
@@ -41,15 +74,12 @@ public class BillingBatchService {
             while (afterId < highestId) {
                 List<Long> contractIds = contractRepository.findEligibleIdsAfter(
                         afterId, highestId, ContractStatus.ACTIVE, monthStart, nextMonthStart,
+                        LocalDateTime.now(BUSINESS_ZONE),
                         PageRequest.of(0, PAGE_SIZE));
                 if (contractIds.isEmpty()) {
                     break;
                 }
                 for (Long contractId : contractIds) {
-                    if (!month.equals(YearMonth.now(BUSINESS_ZONE))) {
-                        log.warn("ROOM_FEE billing stopped after the billing month ended: month={}", month);
-                        return;
-                    }
                     afterId = contractId;
                     try {
                         if (invoiceService.createRoomFeeIfAbsent(contractId, month)) {

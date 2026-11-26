@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.MaintenanceCreateRequest;
 import com.dormhub.dto.request.MaintenanceStatusUpdateRequest;
 import com.dormhub.dto.response.MaintenanceResponse;
@@ -71,41 +73,15 @@ public class MaintenanceService {
     public MaintenanceResponse create(MaintenanceCreateRequest request, Long userId) {
         Student student = getStudentByUserId(userId);
 
-        Room room = student.getRoom();
-
-        if (room == null) {
-            room = roomAssignmentRepository
-                    .findFirstByStudent_IdAndStatusInOrderByAssignmentIdDesc(
-                            student.getId(), List.of(
-                                    RoomAssignmentStatus.ACTIVE,
-                                    RoomAssignmentStatus.APPROVED,
-                                    RoomAssignmentStatus.ASSIGNED,
-                                    RoomAssignmentStatus.CHECKED_IN
-                            ))
-                    .map(RoomAssignment::getRoom)
-                    .orElse(null);
-        }
-
-        if (room == null) {
-            room = dormApplicationRepository
-                    .findFirstByStudent_IdAndStatusOrderByIdDesc(
-                            student.getId(), DormApplicationStatus.APPROVED)
-                    .map(DormApplication::getRequestedRoom)
-                    .orElse(null);
-        }
-
-        if (room == null) {
-            room = contractRepository
-                    .findFirstByStudent_IdAndStatusOrderByContractIdDesc(
-                            student.getId(), ContractStatus.ACTIVE)
-                    .map(Contract::getRoom)
-                    .orElse(null);
-        }
-
-        if (room == null) {
+        RoomAssignment currentAssignment = roomAssignmentRepository
+                .findFirstByStudent_IdAndStatusOrderByAssignmentIdDesc(
+                        student.getId(), RoomAssignmentStatus.CHECKED_IN)
+                .orElse(null);
+        if (currentAssignment == null) {
             throw new AppException(ErrorCode.STUDENT_NOT_IN_ANY_ROOM,
                     "Bạn hiện không đang ở phòng nào nên không thể tạo báo hỏng");
         }
+        Room room = currentAssignment.getRoom();
         student.setRoom(room);
         studentRepository.save(student);
         String requestTitle = request.getAssetName() != null && !request.getAssetName().isBlank()
@@ -188,7 +164,7 @@ public class MaintenanceService {
             MaintenancePriority priority,
             MaintenanceType type,
             int page,
-            int size
+            int size, String search
     ) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
@@ -207,7 +183,7 @@ public class MaintenanceService {
             return predicates;
         };
 
-        return maintenanceRepository.findAll(spec, pageable).map(maintenanceMapper::toResponse);
+        return maintenanceRepository.findAll(spec.and(text(search, "id", "title", "description", "student.studentCode", "student.fullName", "student.user.fullName", "room.roomNumber")), pageable).map(maintenanceMapper::toResponse);
     }
 
     // 5. Manager xem chi tiết 1 yêu cầu bảo trì

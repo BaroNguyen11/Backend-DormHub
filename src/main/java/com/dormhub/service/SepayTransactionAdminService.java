@@ -38,16 +38,18 @@ public class SepayTransactionAdminService {
     }
 
     @Transactional(readOnly = true)
-    public Page<SepayTransactionResponse> search(SepayTransactionStatus status, int page, int size) {
+    public Page<SepayTransactionResponse> search(SepayTransactionStatus status, int page, int size, String search) {
         if (page < 0 || size < 1 || size > MAX_PAGE_SIZE) {
             throw new AppException(ErrorCode.INVALID_REQUEST,
                     "page phải >= 0 và size phải từ 1 đến " + MAX_PAGE_SIZE);
         }
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "receivedAt").and(Sort.by(Sort.Direction.DESC, "id")));
-        Page<SepayTransaction> transactions = status == null
-                ? transactionRepository.findAll(pageable)
-                : transactionRepository.findAllByStatus(status, pageable);
+        Page<SepayTransaction> transactions = transactionRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<SepayTransaction>text(search,
+                        "id", "sepayTransactionId", "code", "content", "gateway", "bankReferenceCode",
+                        "payment.paymentReference", "payment.invoice.invoiceId")
+                .and(com.dormhub.specification.SearchSpecifications.equal("status", status)), pageable);
         return transactions.map(this::toResponse);
     }
 

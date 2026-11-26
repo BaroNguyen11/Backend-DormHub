@@ -18,6 +18,11 @@ public class RoomTransferResponse {
     private final Long currentRoomId;
     private final Long preferredRoomId;
     private final Long approvedRoomId;
+    private final String studentName;
+    private final String studentCode;
+    private final String currentRoomNumber;
+    private final String preferredRoomNumber;
+    private final String approvedRoomNumber;
     private final TransferStatus status;
     private final String reason;
     private final LocalDateTime requestedAt;

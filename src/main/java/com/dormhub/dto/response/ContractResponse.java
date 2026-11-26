@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @AllArgsConstructor
@@ -28,5 +29,6 @@ public class ContractResponse {
     private final String roomNumber;
     private final String buildingName;
     private final DepositStatus depositStatus;
-    private final RoomAssignmentStatus assignmentStatus;
+    @Setter
+    private RoomAssignmentStatus assignmentStatus;
 }

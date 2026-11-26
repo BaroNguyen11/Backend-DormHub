@@ -36,6 +36,7 @@ public class RoomController {
             @RequestParam(required = false) RoomStatus status,
             @RequestParam(required = false) RoomType roomType,
             @RequestParam(required = false) Long buildingId,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "id") String sortBy,
@@ -51,7 +52,7 @@ public class RoomController {
                 : Sort.Direction.ASC;
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(sortDirection, safeSortBy).and(Sort.by(Sort.Direction.ASC, "id")));
-        Page<RoomResponse> rooms = roomService.getAllRooms(status, roomType, buildingId, pageable);
+        Page<RoomResponse> rooms = roomService.getAllRooms(status, roomType, buildingId, pageable, search);
         return ResponseEntity.ok(ApiResponse.success("Get rooms successfully", rooms));
     }
     

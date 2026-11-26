@@ -40,8 +40,10 @@ public class NotificationScheduler {
 
     // Nhắc hóa đơn sắp đến hạn - chạy 09:00 giờ Việt Nam
     // (không mở readOnly tx ở đây để sendNotification tự mở tx ghi riêng cho từng thông báo)
-    @Scheduled(cron = "0 0 9 * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${dormhub.scheduler.notification.due-reminder-cron:0 0 9 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void sendInvoiceDueReminders() {
+        log.info("Scheduler NotificationScheduler.sendInvoiceDueReminders START at={}", java.time.Instant.now());
+        try {
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
         LocalDate threeDaysLater = today.plusDays(3);
 
@@ -74,11 +76,16 @@ public class NotificationScheduler {
             sent++;
         }
         log.info("Nhắc đến hạn: {} hóa đơn trong cửa sổ t-3 ngày, đã gửi {} thông báo", dueSoon.size(), sent);
+        } finally {
+            log.info("Scheduler NotificationScheduler.sendInvoiceDueReminders END at={}", java.time.Instant.now());
+        }
     }
 
     // Nhắc hóa đơn quá hạn - chạy 09:30 giờ Việt Nam
-    @Scheduled(cron = "0 30 9 * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${dormhub.scheduler.notification.overdue-reminder-cron:0 30 9 * * *}", zone = "Asia/Ho_Chi_Minh")
     public void sendOverdueInvoiceReminders() {
+        log.info("Scheduler NotificationScheduler.sendOverdueInvoiceReminders START at={}", java.time.Instant.now());
+        try {
         // Nhất quán với định nghĩa OVERDUE: dueDate < hôm nay (theo múi giờ nghiệp vụ)
         LocalDateTime end = LocalDate.now(BUSINESS_ZONE).minusDays(1).atTime(23, 59, 59);
         LocalDateTime start = end.minusYears(2);
@@ -108,16 +115,24 @@ public class NotificationScheduler {
             sent++;
         }
         log.info("Nhắc quá hạn: {} hóa đơn OVERDUE, đã gửi {} thông báo", overdue.size(), sent);
+        } finally {
+            log.info("Scheduler NotificationScheduler.sendOverdueInvoiceReminders END at={}", java.time.Instant.now());
+        }
     }
 
     // Dọn thông báo cũ hơn 90 ngày - chạy 03:15 (tránh trùng reconcile billing 02:00)
-    @Scheduled(cron = "0 15 3 * * *", zone = "Asia/Ho_Chi_Minh")
+    @Scheduled(cron = "${dormhub.scheduler.notification.cleanup-cron:0 15 3 * * *}", zone = "Asia/Ho_Chi_Minh")
     @Transactional
     public void cleanupOldNotifications() {
+        log.info("Scheduler NotificationScheduler.cleanupOldNotifications START at={}", java.time.Instant.now());
+        try {
         LocalDateTime cutoff = LocalDateTime.now(BUSINESS_ZONE).minusDays(90);
         // Phải xóa bản ghi con (receiver) trước bản ghi cha (notification) để không vi phạm FK
         int receivers = notificationReceiverRepository.deleteByNotification_CreatedAtBefore(cutoff);
         int notifications = notificationRepository.deleteByCreatedAtBefore(cutoff);
         log.info("Dọn thông báo quá 90 ngày: xóa {} receiver, {} notification", receivers, notifications);
+        } finally {
+            log.info("Scheduler NotificationScheduler.cleanupOldNotifications END at={}", java.time.Instant.now());
+        }
     }
 }

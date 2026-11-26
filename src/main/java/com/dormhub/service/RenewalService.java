@@ -1,5 +1,7 @@
 package com.dormhub.service;
 
+import static com.dormhub.specification.SearchSpecifications.*;
+
 import com.dormhub.dto.request.RenewalCreateRequest;
 import com.dormhub.dto.request.RenewalReviewRequest;
 import com.dormhub.dto.response.RenewalResponse;
@@ -12,12 +14,14 @@ import com.dormhub.entity.enums.CheckoutRequestStatus;
 import com.dormhub.entity.enums.ContractStatus;
 import com.dormhub.entity.enums.NotificationType;
 import com.dormhub.entity.enums.RenewalStatus;
+import com.dormhub.entity.enums.RoomAssignmentStatus;
 import com.dormhub.exception.AppException;
 import com.dormhub.exception.ErrorCode;
 import com.dormhub.mapper.RenewalMapper;
 import com.dormhub.repository.CheckoutRequestRepository;
 import com.dormhub.repository.ContractRepository;
 import com.dormhub.repository.RenewalRequestRepository;
+import com.dormhub.repository.RoomAssignmentRepository;
 import com.dormhub.repository.StudentRepository;
 import com.dormhub.repository.UserRepository;
 import java.time.LocalDateTime;
@@ -44,6 +48,7 @@ public class RenewalService {
     private final UserRepository userRepository;
     private final RenewalMapper renewalMapper;
     private final NotificationService notificationService;
+    private final RoomAssignmentRepository roomAssignmentRepository;
 
     public RenewalService(ContractRepository contractRepository,
                           RenewalRequestRepository renewalRequestRepository,
@@ -51,7 +56,8 @@ public class RenewalService {
                           StudentRepository studentRepository,
                           UserRepository userRepository,
                           RenewalMapper renewalMapper,
-                          NotificationService notificationService) {
+                          NotificationService notificationService,
+                          RoomAssignmentRepository roomAssignmentRepository) {
         this.contractRepository = contractRepository;
         this.renewalRequestRepository = renewalRequestRepository;
         this.checkoutRequestRepository = checkoutRequestRepository;
@@ -59,6 +65,7 @@ public class RenewalService {
         this.userRepository = userRepository;
         this.renewalMapper = renewalMapper;
         this.notificationService = notificationService;
+        this.roomAssignmentRepository = roomAssignmentRepository;
     }
 
     @Transactional
@@ -71,6 +78,11 @@ public class RenewalService {
         Contract contract = getContractForUpdate(contractId);
         ensureStudentOwnsContract(contract, student.getId());
         ensureActiveContract(contract);
+        if (!roomAssignmentRepository.existsByContract_ContractIdAndStatusIn(
+                contractId, List.of(RoomAssignmentStatus.CHECKED_IN))) {
+            throw new AppException(ErrorCode.RENEWAL_INVALID_STATUS,
+                    "Chỉ có thể gia hạn sau khi đã nhận phòng");
+        }
         ensureRequestedEndDateIsAfterCurrent(contract, request.getRequestedEndDate());
         // Cross-validation: không cho nộp gia hạn khi còn yêu cầu trả phòng đang mở
         ensureNoOpenCheckoutRequest(contractId);
@@ -122,13 +134,12 @@ public class RenewalService {
 
     @Transactional(readOnly = true)
     public Page<RenewalResponse> getRequestsForManager(
-            RenewalStatus status, int page, int size) {
+            RenewalStatus status, int page, int size, String search) {
         validatePage(page, size);
         Pageable pageable = PageRequest.of(page, size,
                 Sort.by(Sort.Direction.DESC, "requestedAt"));
-        Page<RenewalRequest> requests = status == null
-                ? renewalRequestRepository.findAll(pageable)
-                : renewalRequestRepository.findAllByStatus(status, pageable);
+        Page<RenewalRequest> requests = renewalRequestRepository.findAll(
+                com.dormhub.specification.SearchSpecifications.<RenewalRequest>text(search, "renewalRequestId", "contract.contractId", "contract.student.studentCode", "contract.student.fullName", "contract.student.user.fullName", "contract.room.roomNumber", "reason", "reviewNote").and(equal("status", status)), pageable);
         return requests.map(renewalMapper::toResponse);
     }
 
